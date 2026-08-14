@@ -2,6 +2,7 @@
   "version": 1,
   "include": [
     ".agents",
+    ".claude-plugin",
     ".codex-plugin",
     ".github",
     ".gitignore",

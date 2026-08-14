@@ -40,7 +40,8 @@ function recordDecision(facts, options = {}) {
       mutability: String(action.mutability || 'unknown'),
       pathCount: Array.isArray(action.affectedPaths) ? action.affectedPaths.length : 0,
       hashIntent: Boolean(action.hashIntent),
-      dependencyIntent: Boolean(action.dependencyIntent)
+      dependencyIntent: Boolean(action.dependencyIntent),
+      unboundedDelegation: Boolean(action.unboundedDelegation)
     },
     contract: {
       mode: String(contract.mode || 'unconfirmed'),

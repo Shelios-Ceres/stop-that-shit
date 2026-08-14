@@ -1,14 +1,14 @@
 {
   "name": "stop-that-shit",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
-  "description": "Stop unneeded scope, subagents, dependencies, and hashes in Codex tasks",
+  "description": "Local-first execution control for coding agents",
   "license": "MIT",
   "scripts": {
     "schema:build": "node scripts/build-case-bundle-validator.cjs",
     "schema:check": "node scripts/build-case-bundle-validator.cjs --check",
     "pretest": "npm run schema:check",
-    "test": "node --test test/case-bundle.test.cjs test/contracts.test.cjs test/control-protocol.test.cjs test/decision.test.cjs test/hooks.test.cjs test/paired-eval.test.cjs test/plugin.test.cjs test/runtime-audit.test.cjs test/sts-cli.test.cjs",
+    "test": "node --test test/case-bundle.test.cjs test/claude-adapter.test.cjs test/claude-plugin.test.cjs test/contracts.test.cjs test/control-protocol.test.cjs test/decision.test.cjs test/hooks.test.cjs test/paired-eval.test.cjs test/plugin.test.cjs test/runtime-audit.test.cjs test/sts-cli.test.cjs",
     "sts": "node scripts/sts.cjs",
     "eval": "node scripts/evaluate-cases.cjs",
     "eval:paired": "node scripts/run-paired-eval.cjs",
