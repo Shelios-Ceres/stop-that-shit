@@ -1,9 +1,27 @@
 # Evidence
 
-Version: 0.0.2 Technical Preview 2
+Version: 0.0.3
 Release: https://github.com/lennney/stop-that-shit/releases/tag/0.0.2
 Tagged commit: `a5c937045e8a8de75e897459e4ba5f6c2cc9ae81`
 Last updated: 2026-08-14
+
+This tree is validated with deterministic Hook-schema simulations, real
+child-process stdin/stdout entrypoint tests, cross-platform path regression
+tests, and shared policy tests:
+
+- 115/115 runtime/unit/integration tests pass, including the preserved Codex
+  tests and Claude child-process Hook simulations;
+- 14/14 executable Bad/Good policy case arms pass;
+- Claude review-mode denial, namespaced slash-command arming, POSIX/Windows path
+  normalization, `NotebookEdit`, `PowerShell`, `Monitor`, `EnterWorktree`, and
+  `Workflow` fan-out handling have dedicated regressions;
+- two independent Claude Hook processes cannot oversubscribe `agents=1`;
+- all checked-in `.cjs` files pass `node --check`, all JSON files parse, and the
+  release allowlist passes with 109 files;
+- the generated CaseBundle validator and its schema were not changed;
+- on a local Windows host, `claude plugin validate` reported no warnings and a
+  live smoke session armed the Guard through both the `$stop-that-shit`
+  directive and the namespaced slash form, with a covered write denied.
 
 ## Published technical preview
 
@@ -147,7 +165,7 @@ were run after the null result.
 
 ## Not yet verified
 
-The following are explicit limitations, not 0.0.2 release blockers. The project
+The following are explicit limitations, not release blockers. The project
 does not require a large benchmark to make a probabilistic mitigation claim.
 
 - a multi-scenario live baseline/plugin matrix for the reduced candidate;
@@ -203,12 +221,12 @@ leading synthetic fixtures.
 
 ## Claim rule
 
-Do not claim that Stop That Shit solves Codex overengineering or publish an
+Do not claim that Stop That Shit solves agent overengineering or publish an
 improvement percentage from unit tests or this single scenario.
 
-The defensible 0.0.2 claim is:
+The defensible claim is:
 
-> Stop That Shit gives Codex a short on-demand decision ladder and enforces a
-> few explicit task-authority rules on covered Hook paths. It may reduce some
-> forms of execution drift, but it does not guarantee an effect on stochastic
-> model behavior.
+> Stop That Shit gives a coding agent a short on-demand decision ladder and
+> enforces a few explicit task-authority rules on covered Hook paths. It may
+> reduce some forms of execution drift, but it does not guarantee an effect on
+> stochastic model behavior.

@@ -1,16 +1,41 @@
-# Install Stop That Shit 0.0.2
+# Install Stop That Shit
 
-The current immutable preview is
-[`0.0.2`](https://github.com/lennney/stop-that-shit/releases/tag/0.0.2).
+The default installation is the Guard: one shared Skill plus host Hook events.
+Install Skill only when you prefer advisory guidance without runtime
+enforcement.
 
-The default installation is the Guard: one Skill plus two Hook events. Install
-Skill only when you prefer advisory guidance without runtime enforcement.
-
-If a Codex agent is doing the installation for you, give it
+If an agent is doing the installation for you, give it
 [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md). That guide separates commands
 the agent can run from the Hook review that you must complete yourself.
 
-## Default: Skill + Guard
+## Claude Code: Skill + Guard
+
+The Guard requires Node.js 18 or newer. From the parent directory of a local
+checkout, add the checkout as a local Claude marketplace, then install the
+plugin:
+
+```bash
+claude plugin validate ./stop-that-shit-claude-code
+claude plugin marketplace add ./stop-that-shit-claude-code
+claude plugin install stop-that-shit@stop-that-shit
+```
+
+Restart Claude Code after installation. The plugin registers four Hook events:
+
+- `SessionStart` — injects the current contract into a new session;
+- `UserPromptSubmit` — reads host-neutral `$stop-that-shit ...` directives,
+  natural explicit corrections, and the direct `/stop-that-shit:stop-that-shit
+  ...` slash form. Handling the slash form here keeps direct Skill invocation
+  armed even on hosts that do not expose the `UserPromptExpansion` event;
+- `PreToolUse` — classifies covered actions and can return permission deny;
+- `SubagentStart` — injects the current contract into a started subagent. Agent
+  budget enforcement happens earlier on `PreToolUse` for the `Agent` tool.
+
+Hosts that expose `UserPromptExpansion` may register it for earlier,
+pre-expansion arming; the adapter keeps that handler, but the packaged
+`hooks/hooks.json` stays limited to events every supported host accepts.
+
+## Codex: Skill + Guard
 
 The Guard requires Node.js 18 or newer. Add the repository as a Codex
 marketplace, then install the plugin:
@@ -22,12 +47,13 @@ codex plugin add stop-that-shit@stop-that-shit
 
 Restart Codex after installation.
 
-### Verify the source
+## Verify the source
 
 Inspect these executable surfaces before trusting them:
 
-- `hooks/hooks.json`
-- `hooks/stop-that-shit.cjs`
+- `hooks/hooks.json` and `hooks/stop-that-shit-claude.cjs` for Claude Code;
+- `hooks/codex-hooks.json` and `hooks/stop-that-shit.cjs` for Codex;
+- `src/adapters/`;
 - `src/`
 
 From a local checkout, run:
@@ -38,10 +64,10 @@ npm run eval
 npm run release:check
 ```
 
-### Review two Hooks
+## Review two Hooks
 
-Start a fresh Codex CLI TUI and enter `/hooks`. Inspect each Stop That Shit
-command and trust it only if it matches the source you reviewed.
+Codex records trust for the Hook definition hash, so inspect each Stop That Shit
+command before trusting it. Start a fresh Codex CLI TUI and enter `/hooks`.
 
 Only two events are required:
 
@@ -52,11 +78,37 @@ After review, both rows show `Installed 1 / Active 1 / Review 0`. `Stop 0` is
 expected; the plugin does not install a Stop handler.
 
 Some Codex Desktop builds send `/hooks` as an ordinary message. In that case,
-complete the review in the CLI TUI and restart Desktop. Codex records trust
-against the Hook definition hash, so an update may require another review. Do
+complete the review in the CLI TUI and restart Desktop. An update may require
+another review because Codex records trust against the Hook definition hash. Do
 not bypass Hook trust for ordinary installation.
 
-### Run a smoke test
+## Run a smoke test
+
+### Claude Code
+
+Use a disposable repository. First arm read-only review:
+
+```text
+/stop-that-shit:stop-that-shit review -- Review this repository. Report findings; do not edit.
+```
+
+A covered `Write`, `Edit`, `NotebookEdit`, `EnterWorktree`, mutating
+`Bash`/`PowerShell`/`Monitor` command, or unknown shell command must not run
+under the armed non-mutating contract. Then switch:
+
+```text
+/stop-that-shit:stop-that-shit change -- Create scratch/sts-smoke.txt containing the word pass.
+```
+
+That narrow write should proceed. For a file-lock test:
+
+```text
+/stop-that-shit:stop-that-shit lock change files=scratch/sts-smoke.txt -- Change only this file.
+```
+
+A covered write to a different path should be denied.
+
+### Codex
 
 In a disposable repository, start a review task:
 
@@ -79,16 +131,23 @@ sessions unless you pass `--run`.
 
 ## Optional: Skill only
 
-If you do not want command Hooks, ask the built-in Skill Installer to install
-only the shared Skill folder:
+If you do not want command Hooks, install only the advisory Skill. For Claude
+Code, copy the Skill into the user skills directory:
+
+```bash
+mkdir -p ~/.claude/skills/stop-that-shit
+cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
+```
+
+For Codex, ask the built-in Skill Installer to install the shared Skill folder:
 
 ```text
 $skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.0.2/skills/stop-that-shit
 ```
 
-Start a new task so Codex discovers it. Skill only needs no Hook trust and has
-no runtime enforcement. It is advisory, model behavior can vary, and your
-existing Codex sandbox and approval settings still apply.
+Start a new task so the host discovers it. Skill only needs no Hook trust and
+has no runtime enforcement. It is advisory, model behavior can vary, and your
+existing sandbox and approval settings still apply.
 
 ## Local Guard development
 
@@ -102,9 +161,9 @@ codex plugin add stop-that-shit@stop-that-shit
 
 ## Disable or uninstall
 
-Use `/hooks` to disable the Guard immediately, then remove the plugin and
+Use `/hooks` to disable the Codex Guard immediately, then remove the plugin and
 marketplace when no longer needed. Skill only can be removed separately from
-the Codex Skills directory.
+the host Skills directory.
 
 ```powershell
 codex plugin remove stop-that-shit@stop-that-shit
@@ -122,5 +181,10 @@ If `CODEX_HOME` is unset, the default Skills directory is
 `$HOME\.codex\skills\stop-that-shit`. Check the resolved path before removing
 it.
 
-The Guard stores only the active per-session contract in the host-provided
-`PLUGIN_DATA` directory. Review that directory separately if you uninstall.
+Claude Code plugins are removed with the host's plugin controls. Claude Code
+cleans up `CLAUDE_PLUGIN_DATA` when the plugin is uninstalled from its last
+scope unless you uninstall with `--keep-data`.
+
+The Guard stores only the active per-session contract in the host-provided data
+directory (`PLUGIN_DATA` for Codex, `CLAUDE_PLUGIN_DATA` for Claude Code).
+Review that directory separately if you uninstall.

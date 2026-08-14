@@ -1,12 +1,43 @@
 # Install Stop That Shit as an Agent
 
-This file is for a Codex agent that is helping a user install Stop That Shit
-[`0.0.2`](https://github.com/lennney/stop-that-shit/releases/tag/0.0.2)
-Technical Preview 2. Keep the installation narrow. Do not clone the repository,
-modify the user's Codex configuration, copy authentication files, or bypass
-Hook review.
+This file is for an agent that is helping a user install Stop That Shit. Keep
+the installation narrow. Do not clone the repository, modify the user's host
+configuration, copy authentication files, or bypass Hook review.
 
-## Default installation
+## Claude Code
+
+1. Confirm that `claude` is available and Node.js 18 or newer is installed.
+2. From the parent directory of the local checkout, validate it:
+
+   ```bash
+   claude plugin validate ./stop-that-shit-claude-code
+   ```
+
+3. Add the local marketplace and install the plugin:
+
+   ```bash
+   claude plugin marketplace add ./stop-that-shit-claude-code
+   claude plugin install stop-that-shit@stop-that-shit
+   ```
+
+4. Ask the user to restart Claude Code or run `/reload-plugins`.
+5. In a disposable repository, verify that review stays read-only:
+
+   ```text
+   /stop-that-shit:stop-that-shit review -- Review this repository. Report findings; do not edit.
+   ```
+
+   Then give explicit change authority:
+
+   ```text
+   /stop-that-shit:stop-that-shit change -- Create scratch/sts-smoke.txt containing the word pass.
+   ```
+
+Report whether the review attempted a covered write and whether the change
+created only the requested file. Do not claim that one smoke test proves a
+general improvement in model behavior.
+
+## Codex
 
 1. Confirm that `codex` is available and Node.js 18 or newer is installed.
 2. Run these commands one at a time:
@@ -63,15 +94,3 @@ $skill-installer Install stop-that-shit from https://github.com/lennney/stop-tha
 Ask the user to start a new Codex task after installation. Explain that this
 mode has no runtime enforcement and cannot change Codex sandbox or approval
 settings.
-
-## Report back
-
-Tell the user:
-
-- which mode you installed;
-- the installed plugin version, if available;
-- whether the two expected Hook events are active;
-- the smoke-test result, if the user authorized one;
-- any step that still needs user action.
-
-For troubleshooting and uninstall commands, read [`INSTALL.md`](INSTALL.md).

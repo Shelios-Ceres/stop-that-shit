@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.0.3 — 2026-08-14 (Claude Code adaptation)
+
+- Added a Claude Code plugin manifest, local marketplace, shared Skill discovery,
+  and native Hook configuration without replacing the existing Codex package.
+- Added a thin Claude Code Adapter for `SessionStart`, `UserPromptSubmit`,
+  `PreToolUse`, and `SubagentStart`, all normalized into the existing
+  `ControlEvent v1`. Direct `/stop-that-shit:stop-that-shit ...` invocation is
+  handled in `UserPromptSubmit` so it stays armed on hosts without the
+  `UserPromptExpansion` event; the adapter retains its optional
+  `UserPromptExpansion` handler, but the packaged `hooks/hooks.json` registers
+  only events every supported host accepts.
+- Added Claude-native tool classification for `Write`, `Edit`, `NotebookEdit`,
+  `EnterWorktree`, `Bash`, `PowerShell`, `Monitor`, `Agent`, current read tools,
+  task/control tools, and conservative MCP/plugin fallbacks. `Workflow` is
+  treated as unbounded delegation instead of bypassing `agents=N`.
+- Added POSIX/Windows absolute-path normalization, manifest dependency detection,
+  and process-safe delegation reservations so parallel agent launches respect
+  `agents=N`.
+- Preserved the original Codex two-Hook surface in `hooks/codex-hooks.json` and
+  kept the controller, policy, runtime evidence, cases, and Skill shared.
+- Added Claude adapter, plugin-structure, entrypoint, file-lock, dependency,
+  subagent, lifecycle, and parallel-budget regression tests.
+
 ## 0.0.2 — 2026-08-14 (Technical Preview 2)
 
 - Added `OFF`, `OBSERVING`, and `ARMED` control states with distinct context and

@@ -1,29 +1,40 @@
 # Architecture
 
-Stop That Shit 0.0.2 has two narrow deep modules: a host-independent control
-decision and a metadata-only runtime evidence sidecar.
+Stop That Shit has a host-independent control core and two thin host adapters:
+Codex and Claude Code.
 
 ```text
-Codex Hook JSON
-    -> Codex Adapter
-    -> ControlEvent v1
-    -> decision(contract, action)
-    -> Codex Hook response + RuntimeEvent v1
+Codex Hook JSON  ----> Codex Adapter  ---\
+                                      +--> ControlEvent v1
+Claude Hook JSON ----> Claude Adapter ---/        |
+                                                 v
+                                      decision(contract, action)
+                                                 |
+                         +-----------------------+----------------------+
+                         v                                              v
+                 host Hook response                            RuntimeEvent v1
 ```
 
 - `src/decision.cjs` contains host-independent decisions.
 - `src/contracts.cjs` parses the small prompt contract.
 - `src/controller.cjs` stores the current contract and applies decisions.
-- `src/adapters/codex-*.cjs` classify Codex events and render Hook responses.
-- `src/state.cjs` stores only per-session contract state.
+- `src/adapters/codex-*.cjs` classify Codex events and render Codex responses.
+- `src/adapters/claude-*.cjs` classify Claude Code events and render Claude Hook
+  responses.
+- `src/state.cjs` stores per-session contract state and serializes delegation
+  reservations so concurrent Hook processes cannot oversubscribe `agents=N`.
 - `src/runtime-audit.cjs` appends and reads metadata-only decision events.
 - `src/runtime-annotations.cjs` appends independent human labels.
 
-The packaged Codex manifest subscribes to two events: user prompt and before
-tool use. It does not add a `SubagentStart` Hook, track completed actions, build
-a dependency graph, restore semantic checkpoints, or judge code quality.
+Codex keeps the original two packaged events: `UserPromptSubmit` and
+`PreToolUse`. Claude Code packages `SessionStart`, `UserPromptSubmit`,
+`PreToolUse`, and `SubagentStart`. Only `PreToolUse` is used for hard action
+denial; lifecycle events inject or update the shared contract. Direct Skill
+invocation arrives through `UserPromptSubmit`, which also keeps arming working
+on hosts that do not expose the optional `UserPromptExpansion` event; the
+adapter retains its `UserPromptExpansion` handler for hosts that register it.
 
-Control state and observed response are deliberately separate:
+Control state and observed response remain deliberately separate:
 
 ```text
 OFF        no checks and no normal-action events
