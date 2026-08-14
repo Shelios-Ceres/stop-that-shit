@@ -44,12 +44,21 @@ for (const entry of releaseManifest.include) {
 }
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-const pluginJson = JSON.parse(fs.readFileSync(path.join(root, '.codex-plugin', 'plugin.json'), 'utf8'));
+const codexPlugin = JSON.parse(fs.readFileSync(path.join(root, '.codex-plugin', 'plugin.json'), 'utf8'));
+const claudePlugin = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8'));
+const claudeMarketplace = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'marketplace.json'), 'utf8'));
 const expectedVersion = packageJson.version;
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(expectedVersion)) {
   fail(`package version is not semver: ${expectedVersion}`);
 }
-if (packageJson.version !== pluginJson.version) fail('package and plugin versions differ');
+if (expectedVersion !== codexPlugin.version) fail('package and Codex plugin versions differ');
+if (expectedVersion !== claudePlugin.version) fail('package and Claude plugin versions differ');
+if (!claudeMarketplace.plugins || claudeMarketplace.plugins[0]?.name !== claudePlugin.name || claudeMarketplace.plugins[0]?.source !== './') {
+  fail('Claude marketplace does not point at the root plugin');
+}
+if (Object.hasOwn(claudeMarketplace.plugins?.[0] || {}, 'version')) {
+  fail('Claude marketplace duplicates the plugin version; keep version in plugin.json only');
+}
 
 const selectedFiles = releaseManifest.include.flatMap((entry) => walk(path.join(root, entry)));
 const textExtensions = new Set(['', '.cjs', '.js', '.json', '.md', '.txt', '.yaml', '.yml']);
@@ -66,12 +75,23 @@ for (const file of selectedFiles) {
   if (mojibake.test(content)) fail(`possible mojibake in ${relative}`);
 }
 
-const hooks = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'hooks.json'), 'utf8'));
-for (const groups of Object.values(hooks.hooks)) {
+const codexHooks = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'codex-hooks.json'), 'utf8'));
+for (const groups of Object.values(codexHooks.hooks)) {
   for (const group of groups) {
     for (const hook of group.hooks) {
       if (!hook.command.includes('process.env.PLUGIN_ROOT')) {
-        fail('a Hook command does not resolve from PLUGIN_ROOT');
+        fail('a Codex Hook command does not resolve from PLUGIN_ROOT');
+      }
+    }
+  }
+}
+const claudeHooks = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'hooks.json'), 'utf8'));
+for (const groups of Object.values(claudeHooks.hooks)) {
+  for (const group of groups) {
+    for (const hook of group.hooks) {
+      if (hook.type !== 'command') fail('a Claude Hook is not a command hook');
+      if (hook.command !== 'node "${CLAUDE_PLUGIN_ROOT}/hooks/stop-that-shit-claude.cjs"') {
+        fail('a Claude Hook does not resolve its entrypoint from CLAUDE_PLUGIN_ROOT as a shell-form command');
       }
     }
   }
@@ -81,5 +101,5 @@ if (failures.length) {
   for (const failure of failures) process.stderr.write(`FAIL ${failure}\n`);
   process.exitCode = 1;
 } else {
-  process.stdout.write(`PASS release allowlist (${selectedFiles.length} files, version ${expectedVersion})\n`);
+  process.stdout.write(`PASS release allowlist (${selectedFiles.length} files, version ${expectedVersion}, dual-host)\n`);
 }
