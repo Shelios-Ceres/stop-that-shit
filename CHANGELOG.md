@@ -1,7 +1,17 @@
 # Changelog
 
-## 0.0.3 — 2026-08-14 (Claude Code adaptation)
+## 0.0.3 — 2026-08-14 (Technical Preview 3)
 
+- Fixed CI setup so every matrix job installs the declared development
+  dependencies before running verification.
+- Fixed paired-eval path handling for simulated Windows fixtures and made the
+  generated-schema check stable across LF and CRLF worktrees.
+- Sharpened the public description around small-task overengineering and added
+  repository status badges.
+- Documented the maintainer's SHA-256 observation as anecdotal evidence, kept
+  the live null result public, and retained `hostEffect: unobserved` in Runtime
+  claims.
+- No enforcement families were added in this patch preview.
 - Added a Claude Code plugin manifest, local marketplace, shared Skill discovery,
   and native Hook configuration without replacing the existing Codex package.
 - Added a thin Claude Code Adapter for `SessionStart`, `UserPromptSubmit`,

@@ -38,7 +38,7 @@ State: ARMED / review
 Event: evt_...
 ```
 
-LLM 每次运行都可能不同，Hook 也看不到宿主 agent 的全部动作。Skill 和 Guard 可以减少一部分越界行为，但都不能保证模型每次听话。
+[`0.0.3`](https://github.com/lennney/stop-that-shit/releases/tag/0.0.3) 是第三个技术预览版。LLM 每次运行都可能不同，Hook 也看不到宿主 agent 的全部动作。Skill 和 Guard 可以减少一部分越界行为，但都不能保证模型每次听话。
 
 | 从哪里开始 | 提供什么 | 使用成本 |
 | --- | --- | --- |
@@ -125,7 +125,7 @@ ALLOW
 用 digest 跳过一个未变化大文件的重复读取。
 ```
 
-Guard 默认拒绝可识别的新 hash 操作。用户明确要求，或仓库中的代码与发布流程证明它确实必要时，就用 `hash=allow` 放行。Hook 不会根据自己没读过的代码猜测这个用途。
+`0.0.3` 默认拒绝可识别的新 hash 操作。用户明确要求，或仓库中的代码与发布流程证明它确实必要时，就用 `hash=allow` 放行。Hook 不会根据自己没读过的代码猜测这个用途。
 
 ## 怎么用
 
@@ -196,6 +196,8 @@ Skill 负责语义判断。Hook 在受支持的工具运行前检查明确事实
 
 测试只能证明规则在 covered event 上按设计运行，不能证明模型行为会普遍改善。[EVIDENCE.md](EVIDENCE.md) 记录了测试、真实运行、无差异结果和排除项。
 
+就我自己的使用情况看，启用 Stop That Shit 后，我还没有再遇到那种没有实际消费者却先生成 SHA-256 的动作。这是个人观察，不是受控 benchmark。本地 Runtime 会记录只含元数据的 Hook 检查，区分 checked action、context response 和 permission deny；它仍然会把宿主效果记为 `unobserved`。
+
 ## 安装
 
 ### Claude Code：Skill + Guard
@@ -235,7 +237,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 Codex 仍可使用远程 Skill Installer：
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.0.2/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.0.3/skills/stop-that-shit
 ```
 
 新开任务后，独立 Claude Code Skill 用 `/stop-that-shit`，作为 plugin 安装时用 namespaced `/stop-that-shit:stop-that-shit`；Codex 用 `$stop-that-shit`。Skill-only 路径不需要 Hook 信任，但不能机器拦截越界动作，也不会改变宿主原有的 sandbox 和 approval 设置。

@@ -48,8 +48,10 @@ State: ARMED / review
 Event: evt_...
 ```
 
-LLM runs vary, and Hooks see only part of a host agent run. The Skill and Guard
-can reduce some unwanted work. Neither can guarantee how the model will behave.
+Version [`0.0.3`](https://github.com/lennney/stop-that-shit/releases/tag/0.0.3)
+is Technical Preview 3. LLM runs vary, and Hooks see only part of a host agent
+run. The Skill and Guard can reduce some unwanted work. Neither can guarantee
+how the model will behave.
 
 | Start with | What it adds | Friction |
 | --- | --- | --- |
@@ -150,7 +152,7 @@ ALLOW
 Use a digest to skip rereading an unchanged large file.
 ```
 
-The Guard denies a recognized new hash operation by default. Use `hash=allow`
+`0.0.3` denies a recognized new hash operation by default. Use `hash=allow`
 when the user or the repository supplies the missing job. The Hook does not try
 to infer that job from code it has not seen.
 
@@ -239,6 +241,12 @@ The test suite proves policy behavior on covered events. It does not prove a
 general improvement in model behavior. [EVIDENCE.md](EVIDENCE.md) records the
 tests, live runs, null results, and exclusions.
 
+In my own use, I have not seen the unnecessary SHA-256 behavior recur since
+enabling Stop That Shit. That is a personal observation, not a controlled
+benchmark. The local Runtime records metadata-only Hook checks and separates
+checked actions, context responses, and permission denies. It still reports
+host effect as `unobserved`.
+
 ## Install
 
 ### Claude Code: Skill + Guard
@@ -283,7 +291,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, the remote Skill Installer path is:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.0.2/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.0.3/skills/stop-that-shit
 ```
 
 Start a new task, then invoke the host-native Skill form. A standalone Claude Code skill is `/stop-that-shit`; an installed plugin skill is namespaced as `/stop-that-shit:stop-that-shit`; Codex uses `$stop-that-shit`. This path needs no Hook trust,

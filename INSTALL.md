@@ -1,8 +1,7 @@
-# Install Stop That Shit
+# Install Stop That Shit 0.0.3 Technical Preview 3
 
-The default installation is the Guard: one shared Skill plus host Hook events.
-Install Skill only when you prefer advisory guidance without runtime
-enforcement.
+The current immutable preview is
+[`0.0.3`](https://github.com/lennney/stop-that-shit/releases/tag/0.0.3).
 
 If an agent is doing the installation for you, give it
 [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md). That guide separates commands
@@ -142,7 +141,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, ask the built-in Skill Installer to install the shared Skill folder:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.0.2/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.0.3/skills/stop-that-shit
 ```
 
 Start a new task so the host discovers it. Skill only needs no Hook trust and
