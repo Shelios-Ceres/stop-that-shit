@@ -54,6 +54,16 @@ codex plugin add stop-that-shit@stop-that-shit
 
 重启 Codex。在新的 CLI TUI 中输入 `/hooks`，检查命令后信任 `UserPromptSubmit` 和 `PreToolUse`。状态说明和无 Hook 安装方式见[安装](#安装)。也可以把 [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md) 交给 Codex，让它完成非交互步骤。
 
+### OpenCode 从 GitHub 安装
+
+OpenCode 1.18.18 或更高版本可以全局安装这个仓库，无需 clone：
+
+```bash
+opencode plugin github:lennney/stop-that-shit -g
+```
+
+重启 OpenCode 后用 `$stop-that-shit review -- ...` 设置契约。该命令安装 Guard；内置 Skill 和可选 `/sts` 别名不会自动注册。详见 [INSTALL.md](INSTALL.md#opencode-install-from-github)。
+
 ## Bad Case / Good Case
 
 ```text
@@ -140,7 +150,7 @@ $stop-that-shit explain evt_...
 $stop-that-shit label evt_... correct|incorrect|inconclusive
 ```
 
-`permission_deny_returned` 只表示 Guard 返回了拒绝响应，不证明宿主最终没有执行动作。Stop That Shit 始终把 host effect 标为 `unobserved`。
+`permission_deny_returned`（OpenCode 中为 `execution_denial_returned`）只表示 Guard 返回了拒绝响应，不证明宿主最终没有执行动作。Stop That Shit 始终把 host effect 标为 `unobserved`。
 
 ## Guard 现在能拦什么
 
@@ -163,9 +173,9 @@ Hook 必须收到受支持的事件和足够的输入才能判断。它不会看
 
 ## 工作方式
 
-Skill 负责语义判断。Hook 在受支持的工具运行前检查明确事实。Codex Adapter 把宿主事件翻译成核心决策接口。
+Skill 负责语义判断。Hook 在受支持的工具运行前检查明确事实。Codex Adapter 和 OpenCode Adapter 把宿主事件翻译成核心决策接口。
 
-`0.0.3` 只实现了 Codex Adapter。其他 harness 需要提供等价的 before-action 事件，才能复用同一套核心。接口说明见 [HOST-ADAPTER-CONTRACT.md](HOST-ADAPTER-CONTRACT.md)。
+Codex 和 OpenCode 都已实现 Adapter。OpenCode 插件只使用官方文档中的事件（`message.part.updated` 与 session 事件、`tool.execute.before` / `tool.execute.after`）和 SDK 调用，并通过 `client.session.prompt({ noReply: true })` 注入契约上下文。其他 harness 需要提供等价的 before-action 事件，才能复用同一套核心。接口说明见 [HOST-ADAPTER-CONTRACT.md](HOST-ADAPTER-CONTRACT.md)。
 
 ## 局限和证据
 

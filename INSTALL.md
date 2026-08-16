@@ -77,6 +77,47 @@ For the three-arm baseline/instruction/plugin test, read
 [`evals/codex-paired/README.md`](evals/codex-paired/README.md). It starts no paid
 sessions unless you pass `--run`.
 
+## OpenCode: install from GitHub
+
+OpenCode 1.18.18 or newer can install this repository directly from GitHub
+without a checkout or npm publication:
+
+```bash
+opencode plugin github:lennney/stop-that-shit -g
+```
+
+The command installs the package into OpenCode's cache and adds the GitHub spec
+to the global OpenCode configuration. Package lifecycle scripts are not run.
+Restart OpenCode, then set a contract with the host-neutral form:
+
+```text
+$stop-that-shit review -- Review this diff; do not edit.
+```
+
+The GitHub package installs the executable Guard. It does not automatically
+register the bundled Skill or an `/sts` alias. To add only the optional alias,
+put this entry in your OpenCode configuration:
+
+```json
+{
+  "command": {
+    "sts": {
+      "description": "Set the Stop That Shit task contract",
+      "template": "$stop-that-shit $ARGUMENTS"
+    }
+  }
+}
+```
+
+OpenCode denies covered actions by throwing before tool execution. `deps=ask`
+and `hash=ask` therefore stop the action and ask you to submit a new explicit
+`allow` contract; they do not open a second interactive permission prompt.
+
+Contract state and runtime metadata are stored below OpenCode's state directory
+in `stop-that-shit/`. OpenCode currently has no external-plugin uninstall
+subcommand; remove `github:lennney/stop-that-shit` from the global
+configuration's `plugin` list, then restart OpenCode.
+
 ## Optional: Skill only
 
 If you do not want command Hooks, ask the built-in Skill Installer to install

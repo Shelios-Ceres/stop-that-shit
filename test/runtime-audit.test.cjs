@@ -61,6 +61,7 @@ test('runtime audit appends metadata-only decisions with stable outcome dimensio
   assert.deepEqual(runtime.events.map((event) => event.eventId), [first.eventId, second.eventId]);
   assert.equal(runtime.summary.checkedActions, 2);
   assert.equal(runtime.summary.permissionDenyResponses, 1);
+  assert.equal(runtime.summary.executionDenialResponses, undefined);
   assert.equal(runtime.summary.contextResponses, 0);
   assert.equal(runtime.events[0].controlState, 'armed');
   assert.equal(runtime.events[0].decision.hostEffect, 'unobserved');

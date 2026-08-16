@@ -22,6 +22,7 @@
     "SECURITY.md",
     "cases",
     "hooks",
+    "opencode",
     "package-lock.json",
     "package.json",
     "release-files.json",

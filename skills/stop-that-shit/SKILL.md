@@ -1,6 +1,6 @@
 ---
 name: stop-that-shit
-description: Keep Codex focused on requested and necessary work. Use for bounded changes, review-only tasks, scope creep, speculative hardening, unnecessary hashing or dependencies, repeated audit loops, or when the user invokes Stop That Shit.
+description: Keep coding agents focused on requested and necessary work. Use for bounded changes, review-only tasks, scope creep, speculative hardening, unnecessary hashing or dependencies, repeated audit loops, or when the user invokes Stop That Shit.
 ---
 
 # Stop That Shit
@@ -9,7 +9,7 @@ Do the requested work. Keep necessary consequences. Stop everything else.
 
 This Skill is advisory and works without the Guard hooks. It cannot guarantee
 model behavior. When the Guard is installed, the same directives also provide
-machine-enforced boundaries on supported Codex Hook paths.
+machine-enforced boundaries on supported host action paths.
 
 ## Follow the Stop Ladder
 
@@ -45,7 +45,8 @@ $stop-that-shit review -- Review this diff. Report findings; do not edit.
 
 An installed Guard begins in observation-only `unconfirmed` mode. Do not claim
 that an action was blocked unless an explicit mode armed the Guard and the Guard
-returned permission deny. Even then, describe the host effect as unobserved.
+returned a host-specific denial. Even then, describe the host effect as
+unobserved.
 
 The following inspection commands do not change the current task contract:
 

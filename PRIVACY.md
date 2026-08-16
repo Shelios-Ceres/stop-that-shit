@@ -22,4 +22,4 @@ a returned permission deny is not proof that the proposed action did not occur
 through another path.
 
 Removing the plugin does not necessarily remove host-owned plugin data. Users
-may delete that plugin data through their normal Codex data-management workflow.
+may delete that plugin data through their normal host data-management workflow.

@@ -1,27 +1,33 @@
 # Architecture
 
-Stop That Shit 0.0.2 has two narrow deep modules: a host-independent control
-decision and a metadata-only runtime evidence sidecar.
+Stop That Shit has a host-independent control decision, thin host adapters, and
+a metadata-only runtime evidence sidecar.
 
 ```text
-Codex Hook JSON
-    -> Codex Adapter
-    -> ControlEvent v1
+Codex Hook JSON ----> Codex Adapter -----\
+                                          -> ControlEvent v1
+OpenCode hooks -----> OpenCode Adapter --/
     -> decision(contract, action)
-    -> Codex Hook response + RuntimeEvent v1
+    -> host response + RuntimeEvent v1
 ```
 
 - `src/decision.cjs` contains host-independent decisions.
 - `src/contracts.cjs` parses the small prompt contract.
 - `src/controller.cjs` stores the current contract and applies decisions.
 - `src/adapters/codex-*.cjs` classify Codex events and render Hook responses.
+- `src/adapters/opencode-*.cjs` classify OpenCode messages and tool calls.
+- `opencode/stop-that-shit.mjs` bridges the in-process OpenCode plugin hooks.
 - `src/state.cjs` stores only per-session contract state.
 - `src/runtime-audit.cjs` appends and reads metadata-only decision events.
 - `src/runtime-annotations.cjs` appends independent human labels.
 
-The packaged Codex manifest subscribes to two events: user prompt and before
-tool use. It does not add a `SubagentStart` Hook, track completed actions, build
-a dependency graph, restore semantic checkpoints, or judge code quality.
+The packaged Codex manifest keeps its two-event surface. The OpenCode plugin can
+load from a local file or GitHub package and uses only documented hooks:
+`message.part.updated` and session events through `event`, plus
+`tool.execute.before` and `tool.execute.after`. It recovers user messages with
+the SDK `client.session.message` call, injects contract context with
+`client.session.prompt({ noReply: true })`, and maps child sessions to the root
+contract so a subagent cannot silently replace user authority.
 
 Control state and observed response are deliberately separate:
 
@@ -30,7 +36,7 @@ OFF        no checks and no normal-action events
 OBSERVING  check and record; never return permission deny
 ARMED      explicit task contract; may return permission deny
 
-response: none | context_returned | permission_deny_returned
+response: none | context_returned | permission_deny_returned | execution_denial_returned
 host effect: unobserved
 ```
 

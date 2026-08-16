@@ -51,6 +51,17 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(expectedVersion)) {
 }
 if (packageJson.version !== pluginJson.version) fail('package and plugin versions differ');
 
+const openCodeEntrypoint = './opencode/stop-that-shit.mjs';
+if (packageJson.main !== openCodeEntrypoint) fail('package main is not the OpenCode plugin entrypoint');
+if (packageJson.exports?.['./server'] !== openCodeEntrypoint) {
+  fail('package does not export the OpenCode server entrypoint');
+}
+if (!packageJson.files?.includes('opencode/') || !packageJson.files?.includes('src/')) {
+  fail('package files omit the OpenCode plugin runtime');
+}
+if (!packageJson.engines?.opencode) fail('package does not declare its OpenCode engine');
+if (!fs.existsSync(path.join(root, openCodeEntrypoint))) fail('OpenCode package entrypoint is missing');
+
 const selectedFiles = releaseManifest.include.flatMap((entry) => walk(path.join(root, entry)));
 const textExtensions = new Set(['', '.cjs', '.js', '.json', '.md', '.txt', '.yaml', '.yml']);
 const staleVersion = /(?:v0\.1(?:\.\d+)?|0\.1\.1)/i;

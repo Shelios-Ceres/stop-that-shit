@@ -45,11 +45,12 @@ function activeControlState(contract) {
 
 function decisionMessage(result, contract, event, responseOutcome) {
   const observing = responseOutcome === 'context_returned';
+  const executionDenial = responseOutcome === 'execution_denial_returned';
   const lines = [
     `${observing ? 'WATCH' : 'STOP'} / ${FAMILY_NAMES[result.family] || result.family || 'CONTROL'}`,
     observing
       ? 'Guard returned context; it did not deny the action.'
-      : 'Guard returned permission deny.',
+      : executionDenial ? 'Guard returned a pre-execution denial.' : 'Guard returned permission deny.',
     `Reason: ${result.reasonCode}`,
     `Code: ${result.family}/${result.reasonCode}`,
     `State: ${activeControlState(contract)} / ${contract.mode}`
@@ -69,14 +70,20 @@ function runtimeCommand(prompt) {
 function runtimeSummaryText(runtime) {
   const { summary } = runtime;
   const labels = summary.labels;
-  return [
+  const lines = [
     'Stop That Shit runtime (host effect remains unobserved)',
     `Checked actions: ${summary.checkedActions}`,
     `Context responses: ${summary.contextResponses}`,
-    `Permission-deny responses: ${summary.permissionDenyResponses}`,
+    `Permission-deny responses: ${summary.permissionDenyResponses}`
+  ];
+  if (summary.executionDenialResponses) {
+    lines.push(`Execution-denial responses: ${summary.executionDenialResponses}`);
+  }
+  lines.push(
     `Labels: correct=${labels.correct}; incorrect=${labels.incorrect}; inconclusive=${labels.inconclusive}`,
     `Damaged records ignored: ${summary.damagedRecords}`
-  ].join('\n');
+  );
+  return lines.join('\n');
 }
 
 function handleRuntimeCommand(command, event, state, options) {
@@ -142,8 +149,9 @@ function handleBeforeAction(event, options) {
     writeState(event.sessionId, state, options.dataDir);
   }
 
-  const responseOutcome = result.outcome === 'deny_and_explain' || result.outcome === 'require_user_approval'
-    ? 'permission_deny_returned'
+  const denied = result.outcome === 'deny_and_explain' || result.outcome === 'require_user_approval';
+  const responseOutcome = denied
+    ? options.denialResponseOutcome || 'permission_deny_returned'
     : result.outcome === 'report_and_defer' ? 'context_returned' : 'none';
   const auditEvent = recordDecision({
     sessionId: event.sessionId,
@@ -153,7 +161,7 @@ function handleBeforeAction(event, options) {
     responseOutcome
   }, options);
 
-  if (responseOutcome === 'permission_deny_returned') {
+  if (denied) {
     return { kind: 'deny', decision: result, eventId: auditEvent && auditEvent.eventId, message: decisionMessage(result, state.contract, auditEvent, responseOutcome) };
   }
   if (responseOutcome === 'context_returned') {

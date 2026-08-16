@@ -69,6 +69,19 @@ Restart Codex. In a fresh CLI TUI, enter `/hooks` and trust
 give [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md) to Codex and let it run
 the non-interactive steps.
 
+### OpenCode from GitHub
+
+OpenCode 1.18.18 or newer can install this repository globally without cloning it:
+
+```bash
+opencode plugin github:lennney/stop-that-shit -g
+```
+
+Restart OpenCode and use `$stop-that-shit review -- ...`. The command installs
+the Guard; the bundled Skill and optional `/sts` alias are not registered
+automatically. See [INSTALL.md](INSTALL.md#opencode-install-from-github) for
+details.
+
 ## Bad Case / Good Case
 
 ```text

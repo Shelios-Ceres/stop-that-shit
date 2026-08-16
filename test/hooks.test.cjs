@@ -41,6 +41,11 @@ test('review contract blocks apply_patch', (t) => {
   const output = handleHook(pre('review-session', 'apply_patch', { command: '*** Begin Patch' }), options);
   assert.equal(output.hookSpecificOutput.permissionDecision, 'deny');
   assert.match(output.hookSpecificOutput.permissionDecisionReason, /I\/MODE_FORBIDS_MUTATION/);
+  assert.match(output.hookSpecificOutput.permissionDecisionReason, /Guard returned permission deny\./);
+  assert.doesNotMatch(output.hookSpecificOutput.permissionDecisionReason, /pre-execution denial/);
+  const runtime = readRuntime({ sessionId: 'review-session' }, options);
+  assert.equal(runtime.events[0].decision.responseOutcome, 'permission_deny_returned');
+  assert.equal(runtime.summary.executionDenialResponses, undefined);
 });
 
 test('explicit change contract preserves the paired good case', (t) => {
@@ -177,6 +182,7 @@ test('status, runtime, explain, and label commands do not mutate the active cont
 
   assert.match(status.hookSpecificOutput.additionalContext, /ARMED \/ review/);
   assert.match(runtime.hookSpecificOutput.additionalContext, /checked actions: 1/i);
+  assert.doesNotMatch(runtime.hookSpecificOutput.additionalContext, /Execution-denial responses/);
   assert.match(explain.hookSpecificOutput.additionalContext, new RegExp(eventId));
   assert.match(label.hookSpecificOutput.additionalContext, /correct/);
   assert.deepEqual(readState('query-session', options.dataDir).contract, before);

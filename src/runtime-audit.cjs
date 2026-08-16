@@ -96,6 +96,9 @@ function summarize(events, annotations, damagedRecords) {
   for (const event of labeledEvents) {
     if (event.decision.responseOutcome === 'context_returned') summary.contextResponses += 1;
     if (event.decision.responseOutcome === 'permission_deny_returned') summary.permissionDenyResponses += 1;
+    if (event.decision.responseOutcome === 'execution_denial_returned') {
+      summary.executionDenialResponses = (summary.executionDenialResponses || 0) + 1;
+    }
     summary.reasons[event.decision.reasonCode] = (summary.reasons[event.decision.reasonCode] || 0) + 1;
     if (event.label) summary.labels[event.label] += 1;
   }
