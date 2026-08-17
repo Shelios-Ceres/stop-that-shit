@@ -16,7 +16,7 @@ configuration, copy authentication files, or bypass Hook review.
 3. Add the local marketplace and install the plugin:
 
    ```bash
-   claude plugin marketplace add .
+   claude plugin marketplace add ./
    claude plugin install stop-that-shit@stop-that-shit
    ```
 
