@@ -14,7 +14,7 @@ checkout as a local Claude marketplace, then install the plugin:
 
 ```bash
 claude plugin validate .
-claude plugin marketplace add .
+claude plugin marketplace add ./
 claude plugin install stop-that-shit@stop-that-shit
 ```
 

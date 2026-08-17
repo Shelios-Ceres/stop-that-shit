@@ -47,6 +47,15 @@ test('local Claude marketplace points at the plugin root and leaves version to p
   assert.equal(Object.hasOwn(marketplace.plugins[0], 'version'), false);
 });
 
+test('Claude local install docs use an explicit relative marketplace path', () => {
+  for (const file of ['README.md', 'README_CN.md', 'INSTALL.md']) {
+    const contents = fs.readFileSync(path.join(root, file), 'utf8');
+    const commands = contents.match(/^claude plugin marketplace add .*$/gm) || [];
+    assert.ok(commands.length > 0, `${file} must document the marketplace command`);
+    assert.deepEqual([...new Set(commands)], ['claude plugin marketplace add ./']);
+  }
+});
+
 test('Codex manifest keeps the original two-hook surface', () => {
   const manifest = readJson('.codex-plugin', 'plugin.json');
   const hooks = readJson('hooks', 'codex-hooks.json');

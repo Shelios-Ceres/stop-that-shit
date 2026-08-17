@@ -65,7 +65,7 @@ Extract the repository, then from the checkout root:
 
 ```bash
 claude plugin validate .
-claude plugin marketplace add .
+claude plugin marketplace add ./
 claude plugin install stop-that-shit@stop-that-shit
 ```
 
@@ -267,7 +267,7 @@ Requires Node.js 18 or newer. From the local checkout root:
 
 ```bash
 claude plugin validate .
-claude plugin marketplace add .
+claude plugin marketplace add ./
 claude plugin install stop-that-shit@stop-that-shit
 ```
 

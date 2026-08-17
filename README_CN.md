@@ -56,7 +56,7 @@ Event: evt_...
 
 ```bash
 claude plugin validate .
-claude plugin marketplace add .
+claude plugin marketplace add ./
 claude plugin install stop-that-shit@stop-that-shit
 ```
 
@@ -221,7 +221,7 @@ Skill 负责语义判断。Hook 在受支持的工具运行前检查明确事实
 
 ```bash
 claude plugin validate .
-claude plugin marketplace add .
+claude plugin marketplace add ./
 claude plugin install stop-that-shit@stop-that-shit
 ```
 
