@@ -14,7 +14,8 @@
 </p>
 
 <p align="center">
-  <strong>Keep the agent on the job you gave it.</strong><br>
+  <strong>You asked for one file. Codex split it into six modules, called in three agents, and added SHA-256 checksums. Stop That Shit.</strong><br>
+  Stop That Shit runs locally through adapters for Codex, Claude Code, and OpenCode.<br>
   <a href="#install">Install</a> ·
   <a href="#bad-case--good-case">Bad / Good Case</a> ·
   <a href="cases/README.md">Cases</a> ·
@@ -22,23 +23,21 @@
   <a href="README_CN.md">中文</a>
 </p>
 
-You give a coding agent a small task. It launches several subagents: one inspects the
-code, another reviews the result, and the main agent summarizes everything
-again. It generates a SHA-256 checksum without a consumer. You ask it to review
-a diff; after finding a bug, it starts editing.
+Ask Codex for one small file and you may get a module tree, several subagents,
+a new dependency, and a SHA-256 checksum nobody uses.
 
 Every step comes with a careful explanation. The requested work is still not
-finished, and a noticeable part of the token budget went to work the agent invented
+finished, and a noticeable part of the token budget went to work Codex invented
 for itself.
 
 Adding “do not overengineer” to `AGENTS.md` helps until the file becomes a
 history of every behavior that annoyed you. Stop That Shit turns the small,
 high-confidence part of that history into a Skill and an executable Guard.
 
-Stop That Shit gives an agent a task boundary. The core Guard is
-shared; thin host adapters translate each host's Hook events. The agent still
-reads the repository and follows necessary consequences. When it crosses a boundary that the Guard can prove,
-it gets a red stamp:
+Stop That Shit gives Codex, Claude Code, and OpenCode a task boundary. They
+share one core Guard; thin adapters translate each host's events. Each agent
+still reads the repository and follows necessary consequences. When the Guard
+can prove that an action crossed the boundary, it returns a red stamp:
 
 ```text
 STOP / INTENT

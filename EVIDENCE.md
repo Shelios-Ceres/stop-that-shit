@@ -234,12 +234,12 @@ leading synthetic fixtures.
 
 ## Claim rule
 
-Do not claim that Stop That Shit solves agent overengineering or publish an
-improvement percentage from unit tests or this single scenario.
+Do not claim that Stop That Shit solves overengineering across coding agents or
+publish an improvement percentage from unit tests or this single scenario.
 
 The defensible 0.0.3 claim is:
 
-> Stop That Shit gives a coding agent a short on-demand decision ladder and
-> enforces a few explicit task-authority rules on covered Hook paths. It may
-> reduce some forms of execution drift, but it does not guarantee an effect on
-> stochastic model behavior.
+> In Codex, Claude Code, and OpenCode, Stop That Shit provides a short
+> on-demand decision ladder and enforces a few explicit task-authority rules on
+> covered Hook paths. It may reduce some forms of execution drift, but it does
+> not guarantee an effect on stochastic model behavior.

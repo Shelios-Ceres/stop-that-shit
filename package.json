@@ -2,7 +2,7 @@
   "name": "stop-that-shit",
   "version": "0.0.3",
   "private": true,
-  "description": "Local-first execution control for coding agents",
+  "description": "Stop unneeded scope, subagents, dependencies, and hashes in Codex, Claude Code, and OpenCode tasks",
   "license": "MIT",
   "main": "./opencode/stop-that-shit.mjs",
   "exports": {

@@ -14,7 +14,8 @@
 </p>
 
 <p align="center">
-  <strong>别再造史了：让 agent 只做你交代的活。</strong><br>
+  <strong>你只要一个文件，Codex 却拆成六个模块，叫来三个 Agent，又给所有东西算了一遍 SHA-256。Stop That Shit。</strong><br>
+  Stop That Shit 通过本地 Adapter 支持 Codex、Claude Code 和 OpenCode。<br>
   <a href="#安装">安装</a> ·
   <a href="#bad-case--good-case">Bad / Good Case</a> ·
   <a href="cases/README.md">案例库</a> ·
@@ -22,13 +23,15 @@
   <a href="README.md">English</a>
 </p>
 
-你给 coding agent 一个很小的任务，它动不动就拉起几个 subagent：这个查一遍，那个再 review 一遍，回来以后主 agent 还要重新总结一遍。它也很爱先生成一份 SHA-256 checksum，至于后面谁会用，不知道，反正先算了再说。你让它 review 一个 diff，它发现问题以后直接开始改代码。
+让 Codex 写个小文件，结果可能多出一棵模块树、几个 subagent、一项新依赖，还有一份没人会用的 SHA-256 checksum。
 
-每一步都能说出一个挺严谨的理由。回头一看，要的东西还没做完，token 已经花了一截。花在正事上没意见，花在 agent 自己加出来的活上，就很心疼。
+每一步都能说出一个挺严谨的理由。回头一看，要的东西还没做完，token 已经花了一截。花在正事上没意见，花在 Codex 自己加出来的活上，就很心疼。
 
 我也试过在 `AGENTS.md` 里不断补规则：「不要乱改」「别过度设计」「没让我做的先别做」。每被气到一次就补一条，写着写着，`AGENTS.md` 自己也开始造史了。Stop That Shit 把其中少量、能明确判断的边界做成 Skill 和可执行的 Guard。
 
-Stop That Shit 为 agent 划定任务边界。核心 Guard 与 Skill 共用，宿主差异只放在薄 Adapter 和 Hook 配置中。agent 仍然可以读仓库，也必须处理真正受影响的调用方。它碰到 Guard 能确认的越界动作时，会收到一枚红章：
+Stop That Shit 为 Codex、Claude Code 和 OpenCode 划定任务边界。三者共用核心
+Guard，宿主差异只放在薄 Adapter 和 Hook 配置中。Agent 仍然可以读仓库，也必须
+处理真正受影响的调用方。Guard 确认某个动作越界时，会返回一枚红章：
 
 ```text
 STOP / INTENT

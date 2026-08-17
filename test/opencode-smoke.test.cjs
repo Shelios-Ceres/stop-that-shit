@@ -30,14 +30,9 @@ function runOpencode(args, options = {}) {
 }
 
 const versionProbe = spawnSync('opencode', ['--version'], { encoding: 'utf8', timeout: 30000 });
-const versionMatch = String(versionProbe.stdout || '').trim().match(/^(\d+)\.(\d+)\.(\d+)/);
-const hasSupportedOpencode = !versionProbe.error && versionProbe.status === 0 && versionMatch && (
-  Number(versionMatch[1]) > 1
-  || (Number(versionMatch[1]) === 1 && Number(versionMatch[2]) > 18)
-  || (Number(versionMatch[1]) === 1 && Number(versionMatch[2]) === 18 && Number(versionMatch[3]) >= 18)
-);
+const hasOpencode = !versionProbe.error && versionProbe.status === 0;
 
-test('installed OpenCode plugin denies a write under a review contract', { skip: !hasSupportedOpencode, timeout: 300000 }, async (t) => {
+test('installed OpenCode plugin denies a write under a review contract', { skip: !hasOpencode, timeout: 300000 }, async (t) => {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'sts-opencode-smoke-'));
   t.after(() => fs.rmSync(work, { recursive: true, force: true }));
   const workspace = path.join(work, 'ws');
@@ -55,11 +50,7 @@ test('installed OpenCode plugin denies a write under a review contract', { skip:
 
   // Pack the repository so the test exercises the same package shape that
   // `opencode plugin github:lennney/stop-that-shit -g` installs.
-  assert.ok(process.env.npm_execpath, 'npm_execpath is required for the package smoke test');
-  const pack = spawnSync(process.execPath, [
-    process.env.npm_execpath,
-    'pack', '--json', '--pack-destination', work
-  ], {
+  const pack = spawnSync('npm', ['pack', '--json', '--pack-destination', work], {
     cwd: root,
     encoding: 'utf8',
     timeout: 120000
