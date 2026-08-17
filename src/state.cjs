@@ -55,11 +55,75 @@ function writeState(sessionId, state, override) {
   }
 }
 
+
+function lockPath(sessionId, override) {
+  return `${statePath(sessionId, override)}.lock`;
+}
+
+function sleepSync(milliseconds) {
+  const shared = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(shared, 0, 0, milliseconds);
+}
+
+function acquireSessionLock(sessionId, override, options = {}) {
+  const file = lockPath(sessionId, override);
+  const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 1500;
+  const staleMs = Number.isFinite(options.staleMs) ? options.staleMs : 10000;
+  const started = Date.now();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+
+  while (true) {
+    try {
+      const fd = fs.openSync(file, 'wx', 0o600);
+      const token = `${process.pid}:${crypto.randomUUID()}`;
+      fs.writeFileSync(fd, `${token} ${Date.now()}\n`, 'utf8');
+      return () => {
+        try { fs.closeSync(fd); } catch {}
+        try {
+          const owner = fs.readFileSync(file, 'utf8').trim().split(/\s+/, 1)[0];
+          if (owner === token) fs.unlinkSync(file);
+        } catch (error) {
+          if (!error || error.code !== 'ENOENT') throw error;
+        }
+      };
+    } catch (error) {
+      if (!error || error.code !== 'EEXIST') throw error;
+      try {
+        const stat = fs.statSync(file);
+        if (Date.now() - stat.mtimeMs > staleMs) {
+          fs.unlinkSync(file);
+          continue;
+        }
+      } catch (statError) {
+        if (statError && statError.code === 'ENOENT') continue;
+        throw statError;
+      }
+      if (Date.now() - started >= timeoutMs) {
+        const timeout = new Error(`Timed out waiting for Stop That Shit session lock: ${sessionKey(sessionId)}`);
+        timeout.code = 'STS_LOCK_TIMEOUT';
+        throw timeout;
+      }
+      sleepSync(10);
+    }
+  }
+}
+
+function withSessionLock(sessionId, override, fn, options) {
+  const release = acquireSessionLock(sessionId, override, options);
+  try {
+    return fn();
+  } finally {
+    release();
+  }
+}
+
 module.exports = {
+  acquireSessionLock,
   dataRoot,
   freshState,
   readState,
   sessionKey,
   statePath,
+  withSessionLock,
   writeState
 };

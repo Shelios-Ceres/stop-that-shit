@@ -9,12 +9,12 @@ const test = require('node:test');
 
 const root = path.join(__dirname, '..');
 
-test('plugin manifest and default hook discovery paths exist', () => {
+test('Codex plugin manifest and its preserved hook discovery paths exist', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, '.codex-plugin', 'plugin.json'), 'utf8'));
-  const hooks = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'hooks.json'), 'utf8'));
+  const hooks = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'codex-hooks.json'), 'utf8'));
   assert.equal(manifest.name, 'stop-that-shit');
+  assert.equal(manifest.hooks, './hooks/codex-hooks.json');
   assert.ok(fs.existsSync(path.join(root, 'skills', 'stop-that-shit', 'SKILL.md')));
-  assert.ok(fs.existsSync(path.join(root, 'hooks', 'hooks.json')));
   assert.deepEqual(Object.keys(hooks.hooks).sort(), ['PreToolUse', 'UserPromptSubmit']);
 });
 
@@ -25,8 +25,8 @@ test('the packaged Skill remains useful without the Guard hooks', () => {
   assert.match(skill, /Do the requested work\. Keep necessary consequences\. Stop everything else\./);
 });
 
-test('hook commands resolve the plugin root inside Node and are shell-agnostic', () => {
-  const config = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'hooks.json'), 'utf8'));
+test('Codex hook commands keep resolving the plugin root inside Node and stay shell-agnostic', () => {
+  const config = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'codex-hooks.json'), 'utf8'));
   const handlers = Object.values(config.hooks).flat().flatMap((group) => group.hooks);
   assert.ok(handlers.length > 0);
   for (const handler of handlers) {
@@ -36,12 +36,12 @@ test('hook commands resolve the plugin root inside Node and are shell-agnostic',
   }
 });
 
-test('the packaged hook entrypoint accepts a Codex event on stdin', (t) => {
+test('the packaged Codex hook entrypoint still accepts a Codex event on stdin', (t) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sts-entrypoint-'));
   t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
-  const hook = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'hooks.json'), 'utf8'))
+  const hook = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'codex-hooks.json'), 'utf8'))
     .hooks.UserPromptSubmit[0].hooks[0];
-  const source = hook.command.match(/^node -e \"([\s\S]+)\"$/)[1];
+  const source = hook.command.match(/^node -e "([\s\S]+)"$/)[1];
   const input = JSON.stringify({
     session_id: 'entrypoint-session',
     turn_id: 'turn-1',

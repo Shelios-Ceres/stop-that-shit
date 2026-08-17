@@ -99,6 +99,16 @@ function decide({ contract, action, state = {} }) {
     );
   }
 
+  if (action.mutability === 'delegate' && action.unboundedDelegation) {
+    return decision(
+      controlledOutcome(level),
+      'S',
+      'UNBOUNDED_DELEGATION',
+      'The proposed delegation can fan out to an unbounded number of subagents, so it cannot satisfy agents=N deterministically.',
+      'Use explicit Agent calls within agents=N, or disable the Guard for a deliberately unbounded workflow.'
+    );
+  }
+
   if (action.mutability === 'delegate' && contract.agentsUsed >= contract.agentBudget) {
     return decision(
       controlledOutcome(level),

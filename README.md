@@ -9,13 +9,14 @@
   <img src="https://img.shields.io/github/v/release/lennney/stop-that-shit?include_prereleases&sort=semver&style=flat-square&color=111111&label=release" alt="Latest release">
   <a href="https://github.com/lennney/stop-that-shit/actions/workflows/ci.yml"><img src="https://github.com/lennney/stop-that-shit/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <img src="https://img.shields.io/badge/works%20with-Codex-111111?style=flat-square" alt="Works with Codex">
+  <img src="https://img.shields.io/badge/works%20with-Claude%20Code-111111?style=flat-square" alt="Works with Claude Code">
   <img src="https://img.shields.io/github/license/lennney/stop-that-shit?style=flat-square&color=111111" alt="MIT license">
 </p>
 
 <p align="center">
   <strong>You asked for one file. Codex split it into six modules, called in three agents, and added SHA-256 checksums. Stop That Shit.</strong><br>
-  Stop That Shit runs locally and blocks unneeded scope, subagents, dependencies, and hashes in Codex tasks.<br>
-  <a href="#install-in-two-commands">Install</a> ·
+  Stop That Shit runs locally through adapters for Codex, Claude Code, and OpenCode.<br>
+  <a href="#install">Install</a> ·
   <a href="#bad-case--good-case">Bad / Good Case</a> ·
   <a href="cases/README.md">Cases</a> ·
   <a href="CONTRIBUTING.md">Contribute</a> ·
@@ -33,10 +34,10 @@ Adding “do not overengineer” to `AGENTS.md` helps until the file becomes a
 history of every behavior that annoyed you. Stop That Shit turns the small,
 high-confidence part of that history into a Skill and an executable Guard.
 
-Stop That Shit gives Codex a task boundary. The default Guard combines one
-small Skill with two Hook events. Codex still reads the repository and follows
-necessary consequences. When it crosses a boundary that the Guard can prove,
-it gets a red stamp:
+Stop That Shit gives Codex, Claude Code, and OpenCode a task boundary. They
+share one core Guard; thin adapters translate each host's events. Each agent
+still reads the repository and follows necessary consequences. When the Guard
+can prove that an action crossed the boundary, it returns a red stamp:
 
 ```text
 STOP / INTENT
@@ -47,16 +48,34 @@ Event: evt_...
 ```
 
 Version [`0.0.3`](https://github.com/lennney/stop-that-shit/releases/tag/0.0.3)
-is Technical Preview 3. LLM runs vary, and Hooks see only part
-of a Codex run. The Skill and Guard can reduce some unwanted work. Neither can
-guarantee how the model will behave.
+is Technical Preview 3. LLM runs vary, and Hooks see only part of a host agent
+run. The Skill and Guard can reduce some unwanted work. Neither can guarantee
+how the model will behave.
 
 | Start with | What it adds | Friction |
 | --- | --- | --- |
-| **Skill + Guard** | Stop Ladder plus machine-enforced boundaries | Default; trust two Hooks |
+| **Skill + Guard** | Stop Ladder plus machine-enforced boundaries | Default; review the host Hook configuration |
 | **Skill only** | The Stop Ladder and task-mode guidance | Optional; no enforcement |
 
-## Install in two commands
+## Quick install
+
+### Claude Code
+
+Extract the repository, then from the checkout root:
+
+```bash
+claude plugin validate .
+claude plugin marketplace add .
+claude plugin install stop-that-shit@stop-that-shit
+```
+
+Restart Claude Code or run `/reload-plugins`, then invoke:
+
+```text
+/stop-that-shit:stop-that-shit review -- Review this diff. Report findings; do not edit.
+```
+
+### Codex
 
 ```bash
 codex plugin marketplace add lennney/stop-that-shit
@@ -151,7 +170,14 @@ to infer that job from code it has not seen.
 
 ## Use it
 
-Most tasks need one line:
+Most tasks need one line. Claude Code plugin:
+
+```text
+/stop-that-shit:stop-that-shit change -- Fix the failing config test.
+/stop-that-shit:stop-that-shit review -- Review this diff. Report findings; do not edit.
+```
+
+Codex or host-neutral prompt directive:
 
 ```text
 $stop-that-shit change -- Fix the failing config test.
@@ -190,7 +216,7 @@ effect. Stop That Shit reports host effect as `unobserved`.
 
 ## What the Guard stops
 
-| Codex action on a covered path | Default | You can allow it with |
+| Covered host action | Default | You can allow it with |
 | --- | --- | --- |
 | Write during `review`, `answer`, or `monitor` | Stop | Switch to `change` |
 | Add a dependency | Ask | `deps=allow` |
@@ -208,17 +234,15 @@ questions:
 3. What reachable evidence shows that need?
 4. Would the current acceptance fail without it?
 
-Codex reports or defers the extra work when the answers do not support it.
+The agent reports or defers the extra work when the answers do not support it.
 
 ## How it works
 
-The Skill guides semantic choices. The Hook enforces explicit facts before a
-supported tool runs. A small host Adapter translates Codex events into the core
-decision interface.
-
-Codex is the only implemented Adapter in `0.0.3`. Another harness can use the
-same core when it provides an equivalent before-action event. See
-[HOST-ADAPTER-CONTRACT.md](HOST-ADAPTER-CONTRACT.md).
+The Skill guides semantic choices. Hooks enforce explicit facts before supported
+tools run. Small host Adapters translate each host's events into the same core
+decision interface. Each Adapter exposes the host events it needs, for example
+hard denial before tool use and lifecycle events that carry the active
+contract. See [HOST-ADAPTER-CONTRACT.md](HOST-ADAPTER-CONTRACT.md).
 
 ## Limits and evidence
 
@@ -237,11 +261,24 @@ host effect as `unobserved`.
 
 ## Install
 
-### Default: install the Guard
+### Claude Code: Skill + Guard
 
-The Guard supports Codex desktop and CLI installations with Plugin and Hook
-support. It requires Node.js 18 or newer. Read the Hook source before trusting
-it, then install:
+Requires Node.js 18 or newer. From the local checkout root:
+
+```bash
+claude plugin validate .
+claude plugin marketplace add .
+claude plugin install stop-that-shit@stop-that-shit
+```
+
+Restart or `/reload-plugins`. Claude loads `skills/`, `hooks/hooks.json`, and the
+Claude adapter. The Guard covers `Write`, `Edit`, `NotebookEdit`, `EnterWorktree`,
+shell/`Monitor` mutation, dependency/hash intent, optional file locks, and
+`Agent` budgets on supported Hook paths. Claude `Workflow` is conservatively
+denied while the Guard is armed because its internal subagent fan-out cannot be
+bounded by `agents=N`.
+
+### Codex: Skill + Guard
 
 ```bash
 codex plugin marketplace add lennney/stop-that-shit
@@ -256,14 +293,21 @@ message, use the CLI TUI for this review, then restart Desktop.
 
 ### Optional: Skill only
 
-If you do not want command Hooks, install only the advisory Skill:
+If you do not want command Hooks, install only the advisory Skill. For Claude Code:
+
+```bash
+mkdir -p ~/.claude/skills/stop-that-shit
+cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
+```
+
+For Codex, the remote Skill Installer path is:
 
 ```text
 $skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.0.3/skills/stop-that-shit
 ```
 
-Start a new task, then invoke `$stop-that-shit`. This path needs no Hook trust,
-but it cannot enforce a task boundary or change your Codex sandbox and approval
+Start a new task, then invoke the host-native Skill form. A standalone Claude Code skill is `/stop-that-shit`; an installed plugin skill is namespaced as `/stop-that-shit:stop-that-shit`; Codex uses `$stop-that-shit`. This path needs no Hook trust,
+but it cannot enforce a task boundary or change the host sandbox and approval
 settings.
 
 See [INSTALL.md](INSTALL.md) for the complete Skill and Guard paths. Run the

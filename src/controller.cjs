@@ -5,7 +5,7 @@ const { assertControlEvent } = require('./control-protocol.cjs');
 const { decide } = require('./decision.cjs');
 const { readRuntime, recordDecision } = require('./runtime-audit.cjs');
 const { recordAnnotation } = require('./runtime-annotations.cjs');
-const { readState, writeState } = require('./state.cjs');
+const { readState, withSessionLock, writeState } = require('./state.cjs');
 
 function none() {
   return { kind: 'none' };
@@ -133,21 +133,32 @@ function handlePrompt(event, options) {
 }
 
 function handleBeforeAction(event, options) {
-  const state = readState(event.sessionId, options.dataDir);
-  const action = {
-    mutability: event.action.mutability,
-    hashIntent: Boolean(event.action.hashIntent),
-    reachability: event.action.reachability,
-    authorization: event.action.authorization,
-    affectedPaths: event.action.affectedPaths,
-    dependencyIntent: Boolean(event.action.dependencyIntent)
-  };
-  const result = decide({ contract: state.contract, action, state });
+  const evaluate = () => {
+    const state = readState(event.sessionId, options.dataDir);
+    const action = {
+      mutability: event.action.mutability,
+      hashIntent: Boolean(event.action.hashIntent),
+      reachability: event.action.reachability,
+      authorization: event.action.authorization,
+      affectedPaths: event.action.affectedPaths,
+      dependencyIntent: Boolean(event.action.dependencyIntent),
+      unboundedDelegation: Boolean(event.action.unboundedDelegation)
+    };
+    const result = decide({ contract: state.contract, action, state });
 
-  if (event.action.mutability === 'delegate' && result.outcome === 'allow') {
-    state.contract.agentsUsed += 1;
-    writeState(event.sessionId, state, options.dataDir);
-  }
+    if (event.action.mutability === 'delegate' && result.outcome === 'allow') {
+      state.contract.agentsUsed += 1;
+      writeState(event.sessionId, state, options.dataDir);
+    }
+    return { state, result };
+  };
+
+  // Separate host processes can issue independent agent launches close together.
+  // Serialize only delegation reservations so agents=N remains a real budget
+  // across separate Hook processes without adding locks to the common fast path.
+  const { state, result } = event.action.mutability === 'delegate'
+    ? withSessionLock(event.sessionId, options.dataDir, evaluate)
+    : evaluate();
 
   const denied = result.outcome === 'deny_and_explain' || result.outcome === 'require_user_approval';
   const responseOutcome = denied

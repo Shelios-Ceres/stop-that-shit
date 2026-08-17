@@ -1,35 +1,49 @@
 # Architecture
 
-Stop That Shit has a host-independent control decision, thin host adapters, and
-a metadata-only runtime evidence sidecar.
+Stop That Shit has a host-independent control core, three thin host adapters,
+and a metadata-only runtime evidence sidecar.
 
 ```text
-Codex Hook JSON ----> Codex Adapter -----\
-                                          -> ControlEvent v1
-OpenCode hooks -----> OpenCode Adapter --/
-    -> decision(contract, action)
-    -> host response + RuntimeEvent v1
+Codex Hook JSON  ----> Codex Adapter ----\
+Claude Hook JSON ----> Claude Adapter ----+--> ControlEvent v1
+OpenCode hooks    ----> OpenCode Adapter -/         |
+                                                   v
+                                        decision(contract, action)
+                                                   |
+                           +-----------------------+----------------------+
+                           v                                              v
+                   host response                                  RuntimeEvent v1
 ```
 
 - `src/decision.cjs` contains host-independent decisions.
 - `src/contracts.cjs` parses the small prompt contract.
 - `src/controller.cjs` stores the current contract and applies decisions.
-- `src/adapters/codex-*.cjs` classify Codex events and render Hook responses.
+- `src/adapters/codex-*.cjs` classify Codex events and render Codex responses.
+- `src/adapters/claude-*.cjs` classify Claude Code events and render Claude Hook
+  responses.
 - `src/adapters/opencode-*.cjs` classify OpenCode messages and tool calls.
 - `opencode/stop-that-shit.mjs` bridges the in-process OpenCode plugin hooks.
-- `src/state.cjs` stores only per-session contract state.
+- `src/state.cjs` stores per-session contract state and serializes delegation
+  reservations so concurrent Hook processes cannot oversubscribe `agents=N`.
 - `src/runtime-audit.cjs` appends and reads metadata-only decision events.
 - `src/runtime-annotations.cjs` appends independent human labels.
 
-The packaged Codex manifest keeps its two-event surface. The OpenCode plugin can
-load from a local file or GitHub package and uses only documented hooks:
-`message.part.updated` and session events through `event`, plus
+Codex keeps the original two packaged events: `UserPromptSubmit` and
+`PreToolUse`. Claude Code packages `SessionStart`, `UserPromptSubmit`,
+`PreToolUse`, and `SubagentStart`. Only `PreToolUse` is used for hard action
+denial; lifecycle events inject or update the shared contract. Direct Skill
+invocation arrives through `UserPromptSubmit`, which also keeps arming working
+on hosts that do not expose the optional `UserPromptExpansion` event; the
+adapter retains its `UserPromptExpansion` handler for hosts that register it.
+
+The OpenCode plugin can load from a local file or GitHub package and uses only
+documented hooks: `message.part.updated` and session events through `event`, plus
 `tool.execute.before` and `tool.execute.after`. It recovers user messages with
 the SDK `client.session.message` call, injects contract context with
 `client.session.prompt({ noReply: true })`, and maps child sessions to the root
 contract so a subagent cannot silently replace user authority.
 
-Control state and observed response are deliberately separate:
+Control state and observed response remain deliberately separate:
 
 ```text
 OFF        no checks and no normal-action events

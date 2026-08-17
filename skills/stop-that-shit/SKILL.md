@@ -36,7 +36,17 @@ is not the goal. The smallest correct result is.
 - Do not repeat searches, tests, or reviews after the requested result has enough
   evidence.
 
-With Skill only, treat the mode as an instruction. With Guard installed, use:
+With Skill only, treat the mode as an instruction. With the Guard installed,
+use the host-native invocation form.
+
+Claude Code plugin:
+
+```text
+/stop-that-shit:stop-that-shit change -- Fix the failing config test.
+/stop-that-shit:stop-that-shit review -- Review this diff. Report findings; do not edit.
+```
+
+Codex plugin or host-neutral directive inside a prompt:
 
 ```text
 $stop-that-shit change -- Fix the failing config test.
@@ -48,7 +58,9 @@ that an action was blocked unless an explicit mode armed the Guard and the Guard
 returned a host-specific denial. Even then, describe the host effect as
 unobserved.
 
-The following inspection commands do not change the current task contract:
+The following inspection commands do not change the current task contract. In
+Claude Code, pass the text after the namespaced slash command; in Codex, use the
+`$stop-that-shit` form shown below.
 
 ```text
 $stop-that-shit status
@@ -61,6 +73,12 @@ Use a hard file lock only when the complete boundary is already known:
 
 ```text
 $stop-that-shit lock change files=src/config.cjs|test/config.test.cjs -- Fix this behavior.
+```
+
+Claude Code equivalent:
+
+```text
+/stop-that-shit:stop-that-shit lock change files=src/config.cjs|test/config.test.cjs -- Fix this behavior.
 ```
 
 Do not invent a file list to appear precise. Inspect proportionately and explain
