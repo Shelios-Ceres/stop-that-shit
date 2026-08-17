@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- Added an OpenCode adapter and GitHub-installable plugin entrypoint using only
+  documented OpenCode hooks (`message.part.updated` and session events through
+  `event`, plus `tool.execute.before`/`tool.execute.after`) and the documented
+  SDK (`client.session.message`, `client.session.prompt({ noReply: true })`).
+- Added package metadata for
+  `opencode plugin github:lennney/stop-that-shit -g` while keeping npm
+  publication disabled.
+- Added OpenCode-native tool classification, execution-denial audit outcomes,
+  deterministic adapter/plugin regression tests, and an installed-host smoke
+  test that packs the package, installs it into a real OpenCode 1.18.18, and
+  verifies a review contract denies a write without changing Codex Hook
+  behavior.
+- OpenCode: a non-directive root message under an edit-capable agent now
+  advances a `review` contract to `change` (`source: host`), so switching the
+  host to build mode no longer deadlocks implementation work behind a stale
+  review contract.
+
 ## 0.0.3 — 2026-08-14 (Technical Preview 3)
 
 - Fixed CI setup so every matrix job installs the declared development

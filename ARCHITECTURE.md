@@ -1,18 +1,18 @@
 # Architecture
 
-Stop That Shit has a host-independent control core and two thin host adapters:
-Codex and Claude Code.
+Stop That Shit has a host-independent control core, three thin host adapters,
+and a metadata-only runtime evidence sidecar.
 
 ```text
-Codex Hook JSON  ----> Codex Adapter  ---\
-                                      +--> ControlEvent v1
-Claude Hook JSON ----> Claude Adapter ---/        |
-                                                 v
-                                      decision(contract, action)
-                                                 |
-                         +-----------------------+----------------------+
-                         v                                              v
-                 host Hook response                            RuntimeEvent v1
+Codex Hook JSON  ----> Codex Adapter ----\
+Claude Hook JSON ----> Claude Adapter ----+--> ControlEvent v1
+OpenCode hooks    ----> OpenCode Adapter -/         |
+                                                   v
+                                        decision(contract, action)
+                                                   |
+                           +-----------------------+----------------------+
+                           v                                              v
+                   host response                                  RuntimeEvent v1
 ```
 
 - `src/decision.cjs` contains host-independent decisions.
@@ -21,6 +21,8 @@ Claude Hook JSON ----> Claude Adapter ---/        |
 - `src/adapters/codex-*.cjs` classify Codex events and render Codex responses.
 - `src/adapters/claude-*.cjs` classify Claude Code events and render Claude Hook
   responses.
+- `src/adapters/opencode-*.cjs` classify OpenCode messages and tool calls.
+- `opencode/stop-that-shit.mjs` bridges the in-process OpenCode plugin hooks.
 - `src/state.cjs` stores per-session contract state and serializes delegation
   reservations so concurrent Hook processes cannot oversubscribe `agents=N`.
 - `src/runtime-audit.cjs` appends and reads metadata-only decision events.
@@ -34,6 +36,13 @@ invocation arrives through `UserPromptSubmit`, which also keeps arming working
 on hosts that do not expose the optional `UserPromptExpansion` event; the
 adapter retains its `UserPromptExpansion` handler for hosts that register it.
 
+The OpenCode plugin can load from a local file or GitHub package and uses only
+documented hooks: `message.part.updated` and session events through `event`, plus
+`tool.execute.before` and `tool.execute.after`. It recovers user messages with
+the SDK `client.session.message` call, injects contract context with
+`client.session.prompt({ noReply: true })`, and maps child sessions to the root
+contract so a subagent cannot silently replace user authority.
+
 Control state and observed response remain deliberately separate:
 
 ```text
@@ -41,7 +50,7 @@ OFF        no checks and no normal-action events
 OBSERVING  check and record; never return permission deny
 ARMED      explicit task contract; may return permission deny
 
-response: none | context_returned | permission_deny_returned
+response: none | context_returned | permission_deny_returned | execution_denial_returned
 host effect: unobserved
 ```
 

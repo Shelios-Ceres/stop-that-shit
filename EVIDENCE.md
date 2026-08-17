@@ -20,15 +20,17 @@ This tree is validated with deterministic Hook-schema simulations, real
 child-process stdin/stdout entrypoint tests, cross-platform path regression
 tests, and shared policy tests:
 
-- 115/115 runtime/unit/integration tests pass, including the preserved Codex
-  tests and Claude child-process Hook simulations;
-- 14/14 executable Bad/Good policy case arms pass;
+- 142/142 executed runtime/unit/integration tests pass, including the preserved
+  Codex tests, Claude child-process Hook simulations, and OpenCode adapter/plugin
+  regressions; one optional installed OpenCode smoke is skipped when OpenCode
+  1.18.18 or newer is unavailable;
+- 16/16 executable Bad/Good policy case arms pass;
 - Claude review-mode denial, namespaced slash-command arming, POSIX/Windows path
   normalization, `NotebookEdit`, `PowerShell`, `Monitor`, `EnterWorktree`, and
   `Workflow` fan-out handling have dedicated regressions;
 - two independent Claude Hook processes cannot oversubscribe `agents=1`;
 - all checked-in `.cjs` files pass `node --check`, all JSON files parse, and the
-  release allowlist passes with 109 files;
+  release allowlist passes with 117 files;
 - the generated CaseBundle validator and its schema were not changed;
 - on a local Windows host, `claude plugin validate` reported no warnings and a
   live smoke session armed the Guard through both the `$stop-that-shit`

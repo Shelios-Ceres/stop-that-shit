@@ -62,11 +62,11 @@ how the model will behave.
 
 ### Claude Code
 
-Extract the repository, then from its parent directory:
+Extract the repository, then from the checkout root:
 
 ```bash
-claude plugin validate ./stop-that-shit-claude-code
-claude plugin marketplace add ./stop-that-shit-claude-code
+claude plugin validate .
+claude plugin marketplace add .
 claude plugin install stop-that-shit@stop-that-shit
 ```
 
@@ -88,6 +88,19 @@ Restart Codex. In a fresh CLI TUI, enter `/hooks` and trust
 [Install](#install) for expected status and the no-Hook option. You can also
 give [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md) to Codex and let it run
 the non-interactive steps.
+
+### OpenCode from GitHub
+
+OpenCode 1.18.18 or newer can install this repository globally without cloning it:
+
+```bash
+opencode plugin github:lennney/stop-that-shit -g
+```
+
+Restart OpenCode and use `$stop-that-shit review -- ...`. The command installs
+the Guard; the bundled Skill and optional `/sts` alias are not registered
+automatically. See [INSTALL.md](INSTALL.md#opencode-install-from-github) for
+details.
 
 ## Bad Case / Good Case
 
@@ -251,11 +264,11 @@ host effect as `unobserved`.
 
 ### Claude Code: Skill + Guard
 
-Requires Node.js 18 or newer. From a local checkout:
+Requires Node.js 18 or newer. From the local checkout root:
 
 ```bash
-claude plugin validate ./stop-that-shit-claude-code
-claude plugin marketplace add ./stop-that-shit-claude-code
+claude plugin validate .
+claude plugin marketplace add .
 claude plugin install stop-that-shit@stop-that-shit
 ```
 

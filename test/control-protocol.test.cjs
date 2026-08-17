@@ -9,6 +9,7 @@ const { toControlEvent, fromControlResult } = require('../src/adapters/codex-hoo
 const { assertControlEvent, PROTOCOL_VERSION } = require('../src/control-protocol.cjs');
 const { handleControlEvent } = require('../src/controller.cjs');
 const { detectDependencyIntent } = require('../src/adapters/codex-tool-classifier.cjs');
+const { readRuntime } = require('../src/runtime-audit.cjs');
 
 function dataDir(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sts-protocol-'));
@@ -117,6 +118,8 @@ test('controller decisions do not depend on model metadata', (t) => {
   assert.notEqual(first.eventId, second.eventId);
   assert.equal(first.message.replace(first.eventId, '<event>'), second.message.replace(second.eventId, '<event>'));
   assert.equal(first.kind, 'deny');
+  assert.equal(readRuntime({ sessionId: 'session-1' }, { dataDir: firstDir }).events[0].decision.responseOutcome, 'permission_deny_returned');
+  assert.equal(readRuntime({ sessionId: 'session-1' }, { dataDir: secondDir }).events[0].decision.responseOutcome, 'permission_deny_returned');
 });
 
 test('protocol rejects unknown versions and kinds', () => {

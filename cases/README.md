@@ -23,6 +23,8 @@ decisive fact so that rules judge authority and evidence instead of keywords.
   inside write.
 - `STS-S-005`: an incidental dependency requires authority; `deps=allow`
   preserves the requested dependency Good Case.
+- `STS-S-006`: necessary delegation through an unbounded workflow is denied;
+  bounded delegation within `agents=N` is allowed.
 - `STS-H-001`: migration for unshipped state is deferred; migration for deployed
   supported state is necessary.
 - `STS-H-002`: hashing without a consumer is stopped; an explicitly requested

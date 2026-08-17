@@ -7,16 +7,16 @@ configuration, copy authentication files, or bypass Hook review.
 ## Claude Code
 
 1. Confirm that `claude` is available and Node.js 18 or newer is installed.
-2. From the parent directory of the local checkout, validate it:
+2. From the local checkout root, validate it:
 
    ```bash
-   claude plugin validate ./stop-that-shit-claude-code
+   claude plugin validate .
    ```
 
 3. Add the local marketplace and install the plugin:
 
    ```bash
-   claude plugin marketplace add ./stop-that-shit-claude-code
+   claude plugin marketplace add .
    claude plugin install stop-that-shit@stop-that-shit
    ```
 
