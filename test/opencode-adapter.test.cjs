@@ -19,6 +19,7 @@ const {
   normalizePath
 } = require('../src/adapters/opencode-tool-classifier.cjs');
 const { readRuntime } = require('../src/runtime-audit.cjs');
+const { readState } = require('../src/state.cjs');
 
 function workspace(t) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sts-opencode-'));
@@ -106,4 +107,12 @@ test('task continuations do not consume a new agent budget', () => {
   assert.equal(classifyOpenCodeTool('task', { task_id: 'session-child', prompt: 'continue' }), 'control');
   assert.equal(classifyOpenCodeTool('bash', { command: 'git diff --stat' }), 'read');
   assert.equal(classifyOpenCodeTool('bash', { command: 'node scripts/change.js' }), 'unknown');
+});
+
+test('agents=allow permits observable OpenCode task delegation without consuming legacy counters', (t) => {
+  const options = workspace(t);
+  handleOpenCodeMessage(...message('allow-session', '$stop-that-shit change agents=allow -- explicit delegation'), {}, options);
+  assert.equal(handleOpenCodeTool(...tool('allow-session', 'task', { prompt: 'inspect' }), { directory: '/repo' }, options).kind, 'none');
+  assert.equal(readState('allow-session', options.dataDir).contract.agentPolicy, 'allow');
+  assert.equal(readState('allow-session', options.dataDir).contract.agentsUsed, 0);
 });

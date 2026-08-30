@@ -21,6 +21,12 @@ changing the core policy. Direct Skill invocation is armed from
 `UserPromptExpansion` event; the adapter keeps its `UserPromptExpansion` handler
 for hosts that register it.
 
+Current Codex descendant-agent `PreToolUse` events use the parent session
+identifier, so they read the same persisted contract as the root thread. This
+is a host-adapter dependency: revalidate the session identifier behavior when
+upgrading the Codex host before claiming descendant writes share the root mode
+or file boundary.
+
 The normalized event is versioned as `ControlEvent v1`:
 
 ```json
@@ -61,6 +67,9 @@ The Claude adapter returns a `PreToolUse` `permissionDecision: "deny"` when the
 shared controller denies an action. `SubagentStart` is context-only; `agents=N`
 is enforced before a Claude `Agent` tool runs, then the started subagent receives
 the active contract as additional context.
+
+`agents=allow` is a separate policy that skips only cumulative accounting for
+observable delegation. Opaque or unbounded fan-out remains denied.
 
 The classifier covers Claude-native `Write`, `Edit`, `NotebookEdit`,
 `EnterWorktree`, `Bash`, `PowerShell`, `Monitor`, `Agent`, current read tools,
@@ -142,7 +151,7 @@ path.
 | Class | Explicit coverage | Behavior |
 | --- | --- | --- |
 | `write` | `write_file`, `patch` | Extracts real targets for file locks; missing targets remain unproven. |
-| `delegate` | `delegate_task` with one `goal` or a `tasks` batch | Reserves the number of child agents that will be started: one for `goal`, or `tasks.length` for a batch. The complete count is checked and reserved atomically before the tool runs. |
+| `delegate` | `delegate_task` with one `goal` or a `tasks` batch | Under `agents=N`, reserves the number of child agents that will be started: one for `goal`, or `tasks.length` for a batch. Under `agents=allow`, observable delegation is permitted without cumulative reservation. Opaque/unbounded fan-out remains denied. |
 | `read` | `read_file`, `search_files`, `web_search`, `web_extract`, `vision_analyze` | Known read-only allowlist. |
 | `control` | `clarify`, `todo`, and `delegate_task` with `action=list`, `action=steer`, or `action=stop` | Control operations; do not reserve `agents=N` units and are not repository writes. |
 | shell-derived | `terminal` | Reuses the existing shell classifier: explicit reads are `read`, explicit writes are `write`, and unproven commands are `unknown`. |
@@ -155,11 +164,10 @@ adapter reuses the existing dependency/hash detectors and does not duplicate
 core mode, hash, dependency, file-lock, or agent-budget decisions.
 
 A Hermes `delegate_task` call containing `tasks=[...]` may start multiple child
-units, but the current budget is charged **per `delegate_task` tool call**, not
-per batch child. This limits the number of observed delegation calls; it does
-not claim to limit the total number of real child tasks started inside one
-batch. Charging each child would require a separately reviewed multi-unit
-reservation in the core controller, not a loop in this adapter.
+units. Under `agents=N`, the adapter charges the complete observable child
+count (`tasks.length`) atomically before the tool runs; an insufficient budget
+rejects the whole batch without consuming units. Under `agents=allow`, the same
+observable batch is permitted without cumulative reservation.
 
 ## Support matrix and evidence boundary
 

@@ -1,6 +1,6 @@
 {
   "name": "stop-that-shit",
-  "version": "0.1.0",
+  "version": "0.1.0+codex.20260830120055",
   "description": "Stop unneeded scope, subagents, dependencies, and hashes in Codex tasks.",
   "author": {
     "name": "Stop That Shit contributors",
@@ -18,7 +18,7 @@
   "skills": "./skills/",
   "hooks": "./hooks/codex-hooks.json",
   "interface": {
-    "displayName": "Stop That Shit（别再造史了）",
+    "displayName": "Stop That Shit\uff08\u522b\u518d\u9020\u53f2\u4e86\uff09",
     "shortDescription": "Stop small Codex tasks from growing extra machinery.",
     "longDescription": "Stop That Shit runs locally and blocks unneeded scope, subagents, dependencies, and hashes in Codex tasks.",
     "developerName": "Stop That Shit contributors",

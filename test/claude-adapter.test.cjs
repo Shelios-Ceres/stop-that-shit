@@ -233,6 +233,8 @@ test('Claude tool classification covers native read, write, control, delegation,
   assert.equal(classifyClaudeTool('Write', { file_path: 'x' }), 'write');
   assert.equal(classifyClaudeTool('NotebookEdit', { notebook_path: 'x' }), 'write');
   assert.equal(classifyClaudeTool('Agent', {}), 'delegate');
+  assert.equal(classifyClaudeTool('collaborationspawn_agent', {}), 'delegate');
+  assert.equal(classifyClaudeTool('collaboration_spawn_agent', {}), 'delegate');
   assert.equal(classifyClaudeTool('AskUserQuestion', {}), 'control');
   assert.equal(classifyClaudeTool('Bash', { command: 'git diff --stat' }), 'read');
   assert.equal(classifyClaudeTool('PowerShell', { command: 'Get-Content README.md' }), 'read');

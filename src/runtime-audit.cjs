@@ -47,6 +47,7 @@ function recordDecision(facts, options = {}) {
     contract: {
       mode: String(contract.mode || 'unconfirmed'),
       level: String(contract.level || 'watch'),
+      agentPolicy: String(contract.agentPolicy || 'finite'),
       agentBudget: Number.isInteger(contract.agentBudget) ? contract.agentBudget : 0,
       agentsUsed: Number.isInteger(contract.agentsUsed) ? contract.agentsUsed : 0,
       hashPolicy: String(contract.hashPolicy || 'deny'),

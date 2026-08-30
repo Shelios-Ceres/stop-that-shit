@@ -9,6 +9,7 @@ function defaultContract() {
   return {
     mode: 'unconfirmed',
     level: 'watch',
+    agentPolicy: 'finite',
     agentBudget: 0,
     agentsUsed: 0,
     hashPolicy: 'deny',
@@ -27,10 +28,11 @@ function directiveHead(prompt, matchEnd) {
 }
 
 function parseDirective(prompt) {
-  const mention = /\$stop-that-shit\b/i.exec(prompt);
+  const firstContentLine = String(prompt || '').split(/\r?\n/).find((line) => line.trim()) || '';
+  const mention = /^\s*\$stop-that-shit\b/i.exec(firstContentLine);
   if (!mention) return null;
 
-  const head = directiveHead(prompt, mention.index + mention[0].length);
+  const head = directiveHead(firstContentLine, mention.index + mention[0].length);
   const tokens = head.split(/[\s,]+/).map((token) => token.trim().toLowerCase()).filter(Boolean);
   const parsed = { mentioned: true };
 
@@ -38,7 +40,11 @@ function parseDirective(prompt) {
     if (MODES.has(token)) parsed.mode = token;
     if (LEVELS.has(token)) parsed.level = token;
     const agents = /^agents=(\d+)$/.exec(token);
-    if (agents) parsed.agentBudget = Math.min(Number(agents[1]), 8);
+    if (agents) {
+      parsed.agentPolicy = 'finite';
+      parsed.agentBudget = Math.min(Number(agents[1]), 8);
+    }
+    if (token === 'agents=allow') parsed.agentPolicy = 'allow';
     const hash = /^hash=(deny|ask|allow)$/.exec(token);
     if (hash && HASH_POLICIES.has(hash[1])) parsed.hashPolicy = hash[1];
     const files = /^files=(.+)$/.exec(token);
@@ -94,6 +100,11 @@ function parseContractPrompt(prompt, previousContract = defaultContract()) {
     }
     if (Number.isInteger(directive.agentBudget) && directive.agentBudget !== next.agentBudget) {
       next.agentBudget = directive.agentBudget;
+      next.agentsUsed = 0;
+      changed = true;
+    }
+    if (directive.agentPolicy && directive.agentPolicy !== next.agentPolicy) {
+      next.agentPolicy = directive.agentPolicy;
       next.agentsUsed = 0;
       changed = true;
     }

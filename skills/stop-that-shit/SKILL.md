@@ -68,6 +68,15 @@ $stop-that-shit change -- Fix the failing config test.
 $stop-that-shit review -- Review this diff. Report findings; do not edit.
 ```
 
+Put the directive on the first non-empty line of the user message. Mentions in
+quoted text, code blocks, labeled logs, or later lines do not grant authority.
+Plain text cannot distinguish an intentional directive from external content
+pasted verbatim as the first line, so review that line before submitting it.
+
+For delegation, `agents=N` keeps the legacy cumulative limit (capped at 8),
+while `agents=allow` permits explicitly observable delegation without that
+counter. The Guard still rejects opaque or unbounded fan-out.
+
 An installed Guard begins in observation-only `unconfirmed` mode. Do not claim
 that an action was blocked unless an explicit mode armed the Guard and the Guard
 returned a host-specific denial. Even then, describe the host effect as

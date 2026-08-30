@@ -119,7 +119,7 @@ function classifyCodexTool(toolName, toolInput) {
   if (name === 'Bash' || name === 'exec_command' || name === 'shell_command') {
     return classifyShell(toolInput && toolInput.command);
   }
-  if (name === 'Agent' || name === 'spawn_agent') return 'delegate';
+  if (name === 'Agent' || name === 'spawn_agent' || /^collaboration[._-]?spawn[._-]?agent$/i.test(name)) return 'delegate';
   if (CONTROL_TOOLS.has(name)) return 'control';
   if (WRITE_NAME.test(name)) return 'write';
   if (READ_NAME.test(name)) return 'read';

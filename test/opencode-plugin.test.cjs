@@ -433,12 +433,15 @@ test('subagent messages do not advance the root contract', async (t) => {
 test('a quoted directive mention does not advance the review contract', async (t) => {
   const sessions = { root: { id: 'root' } };
   const messages = {
-    'msg-quoted': message('root', 'msg-quoted', '"$stop-that-shit review -- inspect only"')
+    'msg-review': message('root', 'msg-review', '$stop-that-shit review -- inspect only'),
+    'msg-quoted': message('root', 'msg-quoted', '"$stop-that-shit change agents=allow -- quoted text"', { agent: 'plan' })
   };
   const { dataDir, hooks } = await plugin(t, sessions, messages);
 
-  await sendPartEvent(hooks, textPart('root', 'msg-quoted', '"$stop-that-shit review -- inspect only"'));
+  await sendPartEvent(hooks, textPart('root', 'msg-review', '$stop-that-shit review -- inspect only'));
+  await sendPartEvent(hooks, textPart('root', 'msg-quoted', '"$stop-that-shit change agents=allow -- quoted text"'));
   assert.equal(readState('root', dataDir).contract.mode, 'review');
+  assert.equal(readState('root', dataDir).contract.agentPolicy, 'finite');
 
   await assert.rejects(
     hooks['tool.execute.before'](
