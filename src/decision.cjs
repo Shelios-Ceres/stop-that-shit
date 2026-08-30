@@ -105,20 +105,21 @@ function decide({ contract, action, state = {} }) {
       'S',
       'UNBOUNDED_DELEGATION',
       'The proposed delegation can fan out to an unbounded number of subagents, so it cannot satisfy agents=N deterministically.',
-      'Use explicit Agent calls within agents=N, or disable the Guard for a deliberately unbounded workflow.'
+      'Use explicit observable Agent calls within agents=N or agents=allow, or disable the Guard for a deliberately unbounded workflow.'
     );
   }
 
   const delegationCount = action.mutability === 'delegate'
     ? (Number.isInteger(action.delegationCount) ? action.delegationCount : 1)
     : 0;
-  if (action.mutability === 'delegate' && contract.agentsUsed + delegationCount > contract.agentBudget) {
+  if (action.mutability === 'delegate' && contract.agentPolicy !== 'allow'
+    && contract.agentsUsed + delegationCount > contract.agentBudget) {
     return decision(
       controlledOutcome(level),
       'S',
       'AGENT_BUDGET_EXHAUSTED',
       `The active contract allows ${contract.agentBudget} subagent(s), with ${contract.agentsUsed} already used, and this action requires ${delegationCount}.`,
-      'Continue locally or obtain an explicit agents=N contract.'
+      'Continue locally or obtain an explicit agents=N or agents=allow contract.'
     );
   }
 

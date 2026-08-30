@@ -90,6 +90,12 @@ test('runtime audit records delegation count without task input', (t) => {
   assert.equal(JSON.stringify(runtime).includes('PRIVATE_DELEGATION_GOAL'), false);
 });
 
+test('runtime audit records the explicit agent policy', (t) => {
+  const directory = dataDir(t);
+  const event = recordDecision(facts({ contract: { ...facts().contract, mode: 'change', agentPolicy: 'allow' } }), { dataDir: directory });
+  assert.equal(event.contract.agentPolicy, 'allow');
+});
+
 test('runtime reader tolerates a damaged final JSONL record', (t) => {
   const directory = dataDir(t);
   const event = recordDecision(facts(), { dataDir: directory });

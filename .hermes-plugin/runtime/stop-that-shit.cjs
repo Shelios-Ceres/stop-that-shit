@@ -173,7 +173,7 @@ function contractContext(contract, phase = 'active') {
   }
 
   return [
-    `Stop That Shit (${phase}): mode=${contract.mode}; agents=${contract.agentsUsed}/${contract.agentBudget}; hash=${contract.hashPolicy || 'deny'}; deps=${contract.dependencyPolicy || 'ask'}; files=${Array.isArray(contract.allowedPaths) ? contract.allowedPaths.join('|') : 'unbounded'}.`,
+    `Stop That Shit (${phase}): mode=${contract.mode}; agents=${contract.agentPolicy === 'allow' ? 'allow' : `${contract.agentsUsed}/${contract.agentBudget}`}; hash=${contract.hashPolicy || 'deny'}; deps=${contract.dependencyPolicy || 'ask'}; files=${Array.isArray(contract.allowedPaths) ? contract.allowedPaths.join('|') : 'unbounded'}.`,
     'Stop Ladder: Is it requested? Is it necessary? What reachable evidence proves that? Would omission fail the current acceptance?',
     'Report real findings even when implementation is not authorized.',
     'Before expanding scope, name reachable evidence, failure if omitted, and the fact that changes the next action.',
@@ -236,6 +236,7 @@ function handleRuntimeCommand(command, event, state, options) {
     return context([
       'Stop That Shit status',
       `State: ${activeControlState(state.contract)} / ${state.contract.mode}`,
+      `Agent policy: ${state.contract.agentPolicy === 'allow' ? 'allow' : `finite (${state.contract.agentsUsed}/${state.contract.agentBudget})`}`,
       'Host effect: unobserved',
       'Use runtime for checked-action and Guard-response counts.'
     ].join('\n'));
@@ -256,6 +257,7 @@ function handleRuntimeCommand(command, event, state, options) {
   return context([
     `Stop That Shit event ${found.eventId}`,
     `State: ${found.controlState.toUpperCase()} / ${found.contract.mode}`,
+    `Agent policy: ${found.contract.agentPolicy === 'allow' ? 'allow' : `finite (${found.contract.agentsUsed}/${found.contract.agentBudget})`}`,
     `Action: ${found.action.toolName} (${found.action.mutability}); paths=${found.action.pathCount}`,
     `Decision: ${found.decision.policyOutcome} / ${found.decision.reasonCode}`,
     `Response: ${found.decision.responseOutcome}`,
@@ -295,7 +297,7 @@ function handleBeforeAction(event, options) {
     };
     const result = decide({ contract: state.contract, action, state });
 
-    if (event.action.mutability === 'delegate' && result.outcome === 'allow') {
+    if (event.action.mutability === 'delegate' && result.outcome === 'allow' && state.contract.agentPolicy !== 'allow') {
       state.contract.agentsUsed += delegationCount;
       writeState(event.sessionId, state, options.dataDir);
     }
@@ -303,7 +305,7 @@ function handleBeforeAction(event, options) {
   };
 
   // Separate host processes can issue independent agent launches close together.
-  // Serialize only delegation reservations so agents=N remains a real budget
+  // Serialize delegation decisions so finite agents=N remains a real budget
   // across separate Hook processes without adding locks to the common fast path.
   const { state, result } = event.action.mutability === 'delegate'
     ? withSessionLock(event.sessionId, options.dataDir, evaluate)
@@ -365,6 +367,7 @@ function defaultContract() {
   return {
     mode: 'unconfirmed',
     level: 'watch',
+    agentPolicy: 'finite',
     agentBudget: 0,
     agentsUsed: 0,
     hashPolicy: 'deny',
@@ -383,10 +386,11 @@ function directiveHead(prompt, matchEnd) {
 }
 
 function parseDirective(prompt) {
-  const mention = /\$stop-that-shit\b/i.exec(prompt);
+  const firstContentLine = String(prompt || '').split(/\r?\n/).find((line) => line.trim()) || '';
+  const mention = /^\s*\$stop-that-shit\b/i.exec(firstContentLine);
   if (!mention) return null;
 
-  const head = directiveHead(prompt, mention.index + mention[0].length);
+  const head = directiveHead(firstContentLine, mention.index + mention[0].length);
   const tokens = head.split(/[\s,]+/).map((token) => token.trim().toLowerCase()).filter(Boolean);
   const parsed = { mentioned: true };
 
@@ -394,7 +398,11 @@ function parseDirective(prompt) {
     if (MODES.has(token)) parsed.mode = token;
     if (LEVELS.has(token)) parsed.level = token;
     const agents = /^agents=(\d+)$/.exec(token);
-    if (agents) parsed.agentBudget = Math.min(Number(agents[1]), 8);
+    if (agents) {
+      parsed.agentPolicy = 'finite';
+      parsed.agentBudget = Math.min(Number(agents[1]), 8);
+    }
+    if (token === 'agents=allow') parsed.agentPolicy = 'allow';
     const hash = /^hash=(deny|ask|allow)$/.exec(token);
     if (hash && HASH_POLICIES.has(hash[1])) parsed.hashPolicy = hash[1];
     const files = /^files=(.+)$/.exec(token);
@@ -450,6 +458,11 @@ function parseContractPrompt(prompt, previousContract = defaultContract()) {
     }
     if (Number.isInteger(directive.agentBudget) && directive.agentBudget !== next.agentBudget) {
       next.agentBudget = directive.agentBudget;
+      next.agentsUsed = 0;
+      changed = true;
+    }
+    if (directive.agentPolicy && directive.agentPolicy !== next.agentPolicy) {
+      next.agentPolicy = directive.agentPolicy;
       next.agentsUsed = 0;
       changed = true;
     }
@@ -611,20 +624,21 @@ function decide({ contract, action, state = {} }) {
       'S',
       'UNBOUNDED_DELEGATION',
       'The proposed delegation can fan out to an unbounded number of subagents, so it cannot satisfy agents=N deterministically.',
-      'Use explicit Agent calls within agents=N, or disable the Guard for a deliberately unbounded workflow.'
+      'Use explicit observable Agent calls within agents=N or agents=allow, or disable the Guard for a deliberately unbounded workflow.'
     );
   }
 
   const delegationCount = action.mutability === 'delegate'
     ? (Number.isInteger(action.delegationCount) ? action.delegationCount : 1)
     : 0;
-  if (action.mutability === 'delegate' && contract.agentsUsed + delegationCount > contract.agentBudget) {
+  if (action.mutability === 'delegate' && contract.agentPolicy !== 'allow'
+    && contract.agentsUsed + delegationCount > contract.agentBudget) {
     return decision(
       controlledOutcome(level),
       'S',
       'AGENT_BUDGET_EXHAUSTED',
       `The active contract allows ${contract.agentBudget} subagent(s), with ${contract.agentsUsed} already used, and this action requires ${delegationCount}.`,
-      'Continue locally or obtain an explicit agents=N contract.'
+      'Continue locally or obtain an explicit agents=N or agents=allow contract.'
     );
   }
 
@@ -694,6 +708,7 @@ function recordDecision(facts, options = {}) {
     contract: {
       mode: String(contract.mode || 'unconfirmed'),
       level: String(contract.level || 'watch'),
+      agentPolicy: String(contract.agentPolicy || 'finite'),
       agentBudget: Number.isInteger(contract.agentBudget) ? contract.agentBudget : 0,
       agentsUsed: Number.isInteger(contract.agentsUsed) ? contract.agentsUsed : 0,
       hashPolicy: String(contract.hashPolicy || 'deny'),
@@ -1357,7 +1372,7 @@ function classifyCodexTool(toolName, toolInput) {
   if (name === 'Bash' || name === 'exec_command' || name === 'shell_command') {
     return classifyShell(toolInput && toolInput.command);
   }
-  if (name === 'Agent' || name === 'spawn_agent') return 'delegate';
+  if (name === 'Agent' || name === 'spawn_agent' || /^collaboration[._-]?spawn[._-]?agent$/i.test(name)) return 'delegate';
   if (CONTROL_TOOLS.has(name)) return 'control';
   if (WRITE_NAME.test(name)) return 'write';
   if (READ_NAME.test(name)) return 'read';

@@ -28,7 +28,7 @@ function contractContext(contract, phase = 'active') {
   }
 
   return [
-    `Stop That Shit (${phase}): mode=${contract.mode}; agents=${contract.agentsUsed}/${contract.agentBudget}; hash=${contract.hashPolicy || 'deny'}; deps=${contract.dependencyPolicy || 'ask'}; files=${Array.isArray(contract.allowedPaths) ? contract.allowedPaths.join('|') : 'unbounded'}.`,
+    `Stop That Shit (${phase}): mode=${contract.mode}; agents=${contract.agentPolicy === 'allow' ? 'allow' : `${contract.agentsUsed}/${contract.agentBudget}`}; hash=${contract.hashPolicy || 'deny'}; deps=${contract.dependencyPolicy || 'ask'}; files=${Array.isArray(contract.allowedPaths) ? contract.allowedPaths.join('|') : 'unbounded'}.`,
     'Stop Ladder: Is it requested? Is it necessary? What reachable evidence proves that? Would omission fail the current acceptance?',
     'Report real findings even when implementation is not authorized.',
     'Before expanding scope, name reachable evidence, failure if omitted, and the fact that changes the next action.',
@@ -91,6 +91,7 @@ function handleRuntimeCommand(command, event, state, options) {
     return context([
       'Stop That Shit status',
       `State: ${activeControlState(state.contract)} / ${state.contract.mode}`,
+      `Agent policy: ${state.contract.agentPolicy === 'allow' ? 'allow' : `finite (${state.contract.agentsUsed}/${state.contract.agentBudget})`}`,
       'Host effect: unobserved',
       'Use runtime for checked-action and Guard-response counts.'
     ].join('\n'));
@@ -111,6 +112,7 @@ function handleRuntimeCommand(command, event, state, options) {
   return context([
     `Stop That Shit event ${found.eventId}`,
     `State: ${found.controlState.toUpperCase()} / ${found.contract.mode}`,
+    `Agent policy: ${found.contract.agentPolicy === 'allow' ? 'allow' : `finite (${found.contract.agentsUsed}/${found.contract.agentBudget})`}`,
     `Action: ${found.action.toolName} (${found.action.mutability}); paths=${found.action.pathCount}`,
     `Decision: ${found.decision.policyOutcome} / ${found.decision.reasonCode}`,
     `Response: ${found.decision.responseOutcome}`,
@@ -150,7 +152,7 @@ function handleBeforeAction(event, options) {
     };
     const result = decide({ contract: state.contract, action, state });
 
-    if (event.action.mutability === 'delegate' && result.outcome === 'allow') {
+    if (event.action.mutability === 'delegate' && result.outcome === 'allow' && state.contract.agentPolicy !== 'allow') {
       state.contract.agentsUsed += delegationCount;
       writeState(event.sessionId, state, options.dataDir);
     }
@@ -158,7 +160,7 @@ function handleBeforeAction(event, options) {
   };
 
   // Separate host processes can issue independent agent launches close together.
-  // Serialize only delegation reservations so agents=N remains a real budget
+  // Serialize delegation decisions so finite agents=N remains a real budget
   // across separate Hook processes without adding locks to the common fast path.
   const { state, result } = event.action.mutability === 'delegate'
     ? withSessionLock(event.sessionId, options.dataDir, evaluate)

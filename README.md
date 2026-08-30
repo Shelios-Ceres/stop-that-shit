@@ -171,6 +171,8 @@ $stop-that-shit change -- 修复失败的配置测试。
 $stop-that-shit review -- Review 这个 diff，只报告问题，不要修改。
 ```
 
+把指令放在用户消息的首个非空行。引用、代码块、带标签的日志或后续行中的同名文本不会授予任务权限。纯文本无法区分主动输入与从外部原样粘贴到首行的有效指令；提交前请检查首行。
+
 边界已经很清楚时，再加限制：
 
 ```text
@@ -178,6 +180,7 @@ $stop-that-shit lock change files=src/config.cjs|test/config.test.cjs -- 修复�
 $stop-that-shit change deps=allow -- 添加我要求的解析器依赖。
 $stop-that-shit change hash=allow -- 生成我要求的发布校验和。
 $stop-that-shit change agents=1 -- 使用一个独立测试 subagent。
+$stop-that-shit change agents=allow -- 允许可观察的显式 delegation，不设置累计数量上限。
 ```
 
 不知道全部受影响文件时，不要硬写 `files=`。让 agent 沿真实调用链检查，把完成任务必需的 caller、fixture 和测试一起改完。
@@ -201,7 +204,7 @@ $stop-that-shit label evt_... correct|incorrect|inconclusive
 | --- | --- | --- |
 | 在 `review`、`answer` 或 `monitor` 中写文件 | 停止 | 切换到 `change` |
 | 添加依赖 | 询问 | `deps=allow` |
-| 启动 subagent | 超出预算时停止 | `agents=N` |
+| 启动 subagent | 超出预算时停止；`agents=allow` 允许可观察的显式 delegation | `agents=N` / `agents=allow` |
 | 添加可识别的 hash 操作 | 停止 | `hash=allow` |
 | 写入文件锁之外的路径 | 停止 | 扩大 `files=` |
 

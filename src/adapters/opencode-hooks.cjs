@@ -15,7 +15,7 @@ function promptText(parts) {
     .filter((part) => part && part.type === 'text' && !part.synthetic && !part.ignored)
     .map((part) => String(part.text || ''))
     .filter(Boolean)
-    .join('\n');
+    .join('');
 }
 
 function hostMetadata(input) {

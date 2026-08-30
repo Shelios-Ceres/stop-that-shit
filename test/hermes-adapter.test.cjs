@@ -259,6 +259,16 @@ test('delegate_task reserves the complete batch or leaves the budget unchanged',
   assert.equal(readState('batch-allowed', options.dataDir).contract.agentsUsed, 2);
 });
 
+test('agents=allow permits observable Hermes delegation without consuming legacy counters', (t) => {
+  const { handleHermesHook } = adapter();
+  const options = workspace(t);
+  handleHermesHook(prompt('allow-session', '$stop-that-shit change agents=allow -- explicit delegation'), options);
+  assert.equal(handleHermesHook(pre('allow-session', 'delegate_task', { goal: 'inspect' }), options), null);
+  const state = readState('allow-session', options.dataDir);
+  assert.equal(state.contract.agentPolicy, 'allow');
+  assert.equal(state.contract.agentsUsed, 0);
+});
+
 test('Hermes delegation control actions do not consume agent budget', (t) => {
   const { handleHermesHook } = adapter();
   const options = workspace(t);

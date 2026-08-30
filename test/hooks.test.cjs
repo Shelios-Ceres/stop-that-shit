@@ -8,6 +8,7 @@ const test = require('node:test');
 const { handleHook } = require('../src/hook-policy.cjs');
 const { readState } = require('../src/state.cjs');
 const { readRuntime } = require('../src/runtime-audit.cjs');
+const { classifyCodexTool } = require('../src/adapters/codex-tool-classifier.cjs');
 
 function workspace(t) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sts-test-'));
@@ -35,6 +36,12 @@ function pre(session, toolName, toolInput, turnId = 'turn-1') {
   };
 }
 
+test('Codex collaboration spawn tool variants are delegation actions', () => {
+  for (const name of ['collaborationspawn_agent', 'collaboration_spawn_agent', 'collaboration-spawn-agent', 'collaboration.spawn_agent']) {
+    assert.equal(classifyCodexTool(name, {}), 'delegate');
+  }
+});
+
 test('review contract blocks apply_patch', (t) => {
   const options = workspace(t);
   handleHook(prompt('review-session', '$stop-that-shit review -- inspect only'), options);
@@ -53,6 +60,53 @@ test('explicit change contract preserves the paired good case', (t) => {
   handleHook(prompt('change-session', '$stop-that-shit change -- fix P1 only'), options);
   const output = handleHook(pre('change-session', 'apply_patch', { command: '*** Begin Patch' }), options);
   assert.equal(output, null);
+});
+
+test('agents=allow permits repeated observable delegation without incrementing legacy counters', (t) => {
+  const options = workspace(t);
+  handleHook(prompt('agents-allow-session', '$stop-that-shit change agents=allow -- use explicit specialists'), options);
+  for (const name of ['collaborationspawn_agent', 'collaboration_spawn_agent']) {
+    assert.equal(handleHook(pre('agents-allow-session', name, {}), options), null);
+  }
+  const state = readState('agents-allow-session', options.dataDir);
+  assert.equal(state.contract.agentPolicy, 'allow');
+  assert.equal(state.contract.agentBudget, 0);
+  assert.equal(state.contract.agentsUsed, 0);
+  const runtime = readRuntime({ sessionId: 'agents-allow-session' }, options);
+  assert.equal(runtime.events.at(-1).contract.agentPolicy, 'allow');
+});
+
+test('agents=allow does not weaken mode, hash, dependency, or file boundaries', (t) => {
+  const options = workspace(t);
+
+  handleHook(prompt('allow-review-session', '$stop-that-shit review agents=allow -- inspect only'), options);
+  assert.match(
+    handleHook(pre('allow-review-session', 'apply_patch', { command: '*** Begin Patch' }), options)
+      .hookSpecificOutput.permissionDecisionReason,
+    /I\/MODE_FORBIDS_MUTATION/
+  );
+
+  handleHook(prompt('allow-hash-session', '$stop-that-shit change agents=allow -- update code'), options);
+  assert.match(
+    handleHook(pre('allow-hash-session', 'Bash', { command: 'sha256sum dist/release.zip' }), options)
+      .hookSpecificOutput.permissionDecisionReason,
+    /H\/HASH_NOT_AUTHORIZED/
+  );
+
+  handleHook(prompt('allow-deps-session', '$stop-that-shit change agents=allow deps=deny -- update code'), options);
+  assert.match(
+    handleHook(pre('allow-deps-session', 'Bash', { command: 'npm install lodash' }), options)
+      .hookSpecificOutput.permissionDecisionReason,
+    /S\/DEPENDENCY_NOT_AUTHORIZED/
+  );
+
+  handleHook(prompt('allow-files-session', '$stop-that-shit lock change agents=allow files=src/config.cjs -- update config'), options);
+  assert.match(
+    handleHook(pre('allow-files-session', 'apply_patch', {
+      patch: '*** Begin Patch\n*** Update File: README.md\n@@\n-old\n+new\n*** End Patch'
+    }), options).hookSpecificOutput.permissionDecisionReason,
+    /S\/PATH_OUTSIDE_CONTRACT/
+  );
 });
 
 test('default hash policy blocks a newly added hashing API', (t) => {

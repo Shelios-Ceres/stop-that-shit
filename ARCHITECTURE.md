@@ -30,6 +30,9 @@ Hermes native Plugin ----> Hermes CLI Adapter --/            v
   native Plugin callbacks to the bundled runtime.
 - `src/state.cjs` stores per-session contract state and serializes delegation
   reservations so concurrent Hook processes cannot oversubscribe `agents=N`.
+  `agentPolicy=allow` is a separate policy field: it leaves the legacy numeric
+  `agentBudget` and `agentsUsed` fields intact while skipping cumulative
+  reservation for observable delegation.
 - `src/runtime-audit.cjs` appends and reads metadata-only decision events.
 - `src/runtime-annotations.cjs` appends independent human labels.
 
@@ -94,7 +97,8 @@ Hard decisions are limited to observable facts:
 - writes in a confirmed non-mutating mode;
 - writes outside an optional explicit `files=` list;
 - covered dependency additions without authority;
-- subagent launches beyond `agents=N`;
+- subagent launches beyond `agents=N`; `agents=allow` permits observable
+  delegation but still rejects opaque/unbounded fan-out;
 - high-confidence hashing without `hash=allow`.
 
 Every observing or armed check is recorded even when the policy allows it, so

@@ -74,3 +74,9 @@ test('unbounded delegation takes precedence over a finite requested count', () =
   });
   assert.equal(actual.reasonCode, 'UNBOUNDED_DELEGATION');
 });
+
+test('agents=allow permits observed delegation but still rejects opaque fan-out', () => {
+  const contract = { mode: 'change', level: 'guard', agentPolicy: 'allow', agentBudget: 0, agentsUsed: 0 };
+  assert.equal(decide({ contract, action: { mutability: 'delegate', delegationCount: 20 } }).outcome, 'allow');
+  assert.equal(decide({ contract, action: { mutability: 'delegate', unboundedDelegation: true } }).reasonCode, 'UNBOUNDED_DELEGATION');
+});

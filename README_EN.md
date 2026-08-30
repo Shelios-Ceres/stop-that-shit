@@ -207,6 +207,11 @@ $stop-that-shit change -- Fix the failing config test.
 $stop-that-shit review -- Review this diff. Report findings; do not edit.
 ```
 
+Put the directive on the first non-empty line of the user message. Matching text
+inside quotes, code blocks, labeled logs, or later lines does not grant authority.
+Plain text cannot distinguish an intentional directive from external content
+pasted verbatim as the first line, so review that line before submitting it.
+
 Add a boundary when you know it in advance:
 
 ```text
@@ -214,6 +219,7 @@ $stop-that-shit lock change files=src/config.cjs|test/config.test.cjs -- Fix thi
 $stop-that-shit change deps=allow -- Add the requested parser dependency.
 $stop-that-shit change hash=allow -- Generate the requested release checksum.
 $stop-that-shit change agents=1 -- Use one independent test shard.
+$stop-that-shit change agents=allow -- Permit observable explicit delegation without a cumulative limit.
 ```
 
 Skip `files=` when you do not know every affected file. Codex should inspect the
@@ -243,7 +249,7 @@ effect. Stop That Shit reports host effect as `unobserved`.
 | --- | --- | --- |
 | Write during `review`, `answer`, or `monitor` | Stop | Switch to `change` |
 | Add a dependency | Ask | `deps=allow` |
-| Launch a subagent | Stop above budget | `agents=N` |
+| Launch a subagent | Stop above budget; `agents=allow` permits observable explicit delegation | `agents=N` / `agents=allow` |
 | Add a recognized hash operation | Stop | `hash=allow` |
 | Write outside a file lock | Stop | Expand `files=` |
 
