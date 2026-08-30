@@ -6,8 +6,8 @@
 
 <p align="center">
   <a href="https://github.com/lennney/stop-that-shit/stargazers"><img src="https://img.shields.io/github/stars/lennney/stop-that-shit?style=flat-square&color=111111&label=stars" alt="GitHub stars"></a>
-  <a href="https://github.com/lennney/stop-that-shit/releases"><img src="https://img.shields.io/github/v/release/lennney/stop-that-shit?include_prereleases&sort=semver&style=flat-square&color=111111&label=release" alt="Latest release"></a>
-  <a href="https://github.com/lennney/stop-that-shit/actions/workflows/ci.yml"><img src="https://github.com/lennney/stop-that-shit/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/Shelios-Ceres/stop-that-shit/releases"><img src="https://img.shields.io/github/v/release/Shelios-Ceres/stop-that-shit?include_prereleases&sort=semver&style=flat-square&color=111111&label=release" alt="Latest release"></a>
+  <a href="https://github.com/Shelios-Ceres/stop-that-shit/actions/workflows/ci.yml"><img src="https://github.com/Shelios-Ceres/stop-that-shit/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <img src="https://img.shields.io/badge/works%20with-Codex-111111?style=flat-square" alt="Works with Codex">
   <img src="https://img.shields.io/badge/works%20with-Claude%20Code-111111?style=flat-square" alt="Works with Claude Code">
   <img src="https://img.shields.io/badge/works%20with-OpenCode-111111?style=flat-square" alt="Works with OpenCode">
@@ -63,6 +63,8 @@ Runtime through four host Adapters.
 
 Compared with upstream [`lennney/stop-that-shit`](https://github.com/lennney/stop-that-shit), this fork extends subagent authorization and task-contract parsing:
 
+Current release: [`0.1.0-shelios.1`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.1), based on upstream `0.1.0`.
+
 - Adds `agents=allow`, which removes only the cumulative limit for **observable, explicit delegation**. `agents=N` retains its existing cumulative budget of `0–8`.
 - `agents=allow` does not disable the other Guard boundaries. The `review`, `answer`, and `monitor` modes, `files=`, dependency, and hash policies remain active; opaque or unbounded fan-out is still denied.
 - A Stop That Shit directive is now recognized only on the first non-empty line of the user message. Matching text in quotes, code blocks, labeled logs, or later lines cannot accidentally replace the task contract.
@@ -107,7 +109,7 @@ Restart Claude Code or run `/reload-plugins`, then invoke:
 ### Codex
 
 ```bash
-codex plugin marketplace add lennney/stop-that-shit
+codex plugin marketplace add Shelios-Ceres/stop-that-shit
 codex plugin add stop-that-shit@stop-that-shit
 ```
 
@@ -121,7 +123,7 @@ non-interactive steps.
 OpenCode 1.18.18 or newer can install this repository globally without cloning it:
 
 ```bash
-opencode plugin github:lennney/stop-that-shit -g
+opencode plugin github:Shelios-Ceres/stop-that-shit -g
 ```
 
 Restart OpenCode and use `$stop-that-shit review -- ...`. The command installs
@@ -134,7 +136,7 @@ details.
 Requires Node.js 18+.
 
 ```fish
-hermes plugins install lennney/stop-that-shit/.hermes-plugin --no-enable
+hermes plugins install Shelios-Ceres/stop-that-shit/.hermes-plugin --no-enable
 hermes plugins enable stop-that-shit
 hermes plugins list
 ```
@@ -312,7 +314,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, the remote Skill Installer path is:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.1.0/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.1/skills/stop-that-shit
 ```
 
 Start a new task, then invoke the host-native Skill form. A standalone Claude Code skill is `/stop-that-shit`; an installed plugin skill is namespaced as `/stop-that-shit:stop-that-shit`; Codex uses `$stop-that-shit`. This path needs no Hook trust,

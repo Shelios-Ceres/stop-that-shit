@@ -8,7 +8,7 @@ Hermes Agent plugin and its self-contained Node runtime bundle.
 Requires Node.js 18 or newer.
 
 ```fish
-hermes plugins install lennney/stop-that-shit/.hermes-plugin --no-enable
+hermes plugins install Shelios-Ceres/stop-that-shit/.hermes-plugin --no-enable
 hermes plugins enable stop-that-shit
 hermes plugins list
 ```

@@ -4,6 +4,46 @@
 
 No unreleased changes yet.
 
+## 0.1.0-shelios.1 — 2026-08-30 (Shelios Fork Release / Shelios Fork 正式版)
+
+> **基于上游 0.1.0，增加显式的不限累计 subagent 策略，同时保留其他任务边界。**
+>
+> **Based on upstream 0.1.0, this release adds an explicit delegation policy
+> without a cumulative subagent limit while preserving the other task boundaries.**
+
+### 新增与修复 / Changes
+
+- 新增 `agents=allow`，允许可观察、显式的 delegation 不消耗累计预算；
+  `agents=N` 继续使用原有的 `0–8` 累计上限。
+  / Adds `agents=allow` for observable, explicit delegation without cumulative
+  accounting; `agents=N` retains its existing `0–8` cumulative limit.
+- `agents=allow` 不会放宽 mode、`files=`、依赖或 hash 边界，也不会允许
+  不透明或无法确定数量的 fan-out。
+  / Keeps mode, `files=`, dependency, and hash boundaries active and continues
+  to reject opaque or unbounded fan-out.
+- 合同指令只从用户消息首个非空行解析，避免引用、代码块、带标签日志或后续
+  行中的同名文本误改任务合同。
+  / Parses contract directives only from the first non-empty user-message line,
+  preventing quoted, fenced, labeled-log, or later-line text from replacing it.
+- 补充 Codex delegation 工具识别、Hermes 批量 delegation 原子计数、
+  OpenCode prompt 片段处理，以及 Runtime agent policy 状态记录。
+  / Extends Codex delegation classification, Hermes atomic batch accounting,
+  OpenCode prompt-part handling, and Runtime agent-policy reporting.
+- 增加 Codex、Claude Code、OpenCode 与 Hermes Agent CLI 的回归测试。
+  / Adds regression coverage across all four host adapters.
+
+### 发布边界 / Release boundary
+
+- 正式分发入口为本 GitHub tag 与自动生成的源码归档；不发布 npm package。
+  / The canonical distribution is this GitHub tag and its generated source
+  archives; no npm package is published.
+- 发布门禁通过 192 项测试、18/18 个可执行案例，以及 135 文件的多宿主
+  release allowlist；1 项可选 OpenCode 安装后 smoke 按环境跳过。
+  / Release gates pass 192 tests, 18/18 executable case arms, and the 135-file
+  multi-host release allowlist; one optional installed OpenCode smoke is skipped.
+- 上游项目与原始贡献者归属保持不变，本版本仅描述此 Fork 的增量。
+  / Upstream attribution is unchanged; this release describes only the fork delta.
+
 ## 0.1.0 — 2026-08-20 (First Multi-platform Release / 首个多平台版本)
 
 > **同一个任务边界核心，现在有四套宿主适配：Codex、Claude Code、

@@ -1,7 +1,7 @@
-# Install Stop That Shit 0.1.0
+# Install Stop That Shit 0.1.0-shelios.1
 
 The current multi-platform release is
-[`0.1.0`](https://github.com/lennney/stop-that-shit/releases/tag/0.1.0).
+[`0.1.0-shelios.1`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.1), based on upstream [`0.1.0`](https://github.com/lennney/stop-that-shit/releases/tag/0.1.0).
 
 If an agent is doing the installation for you, give it
 [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md). That guide separates commands
@@ -39,7 +39,7 @@ The Guard requires Node.js 18 or newer. Add the repository as a Codex
 marketplace, then install the plugin:
 
 ```powershell
-codex plugin marketplace add lennney/stop-that-shit
+codex plugin marketplace add Shelios-Ceres/stop-that-shit
 codex plugin add stop-that-shit@stop-that-shit
 ```
 
@@ -133,7 +133,7 @@ OpenCode 1.18.18 or newer can install this repository directly from GitHub
 without a checkout or npm publication:
 
 ```bash
-opencode plugin github:lennney/stop-that-shit -g
+opencode plugin github:Shelios-Ceres/stop-that-shit -g
 ```
 
 The command installs the package into OpenCode's cache and adds the GitHub spec
@@ -165,7 +165,7 @@ and `hash=ask` therefore stop the action and ask you to submit a new explicit
 
 Contract state and runtime metadata are stored below OpenCode's state directory
 in `stop-that-shit/`. OpenCode currently has no external-plugin uninstall
-subcommand; remove `github:lennney/stop-that-shit` from the global
+subcommand; remove `github:Shelios-Ceres/stop-that-shit` from the global
 configuration's `plugin` list, then restart OpenCode.
 
 ## Hermes Agent CLI
@@ -173,7 +173,7 @@ configuration's `plugin` list, then restart OpenCode.
 Requires Node.js 18 or newer.
 
 ```fish
-hermes plugins install lennney/stop-that-shit/.hermes-plugin --no-enable
+hermes plugins install Shelios-Ceres/stop-that-shit/.hermes-plugin --no-enable
 hermes plugins enable stop-that-shit
 hermes plugins list
 ```
@@ -202,7 +202,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, ask the built-in Skill Installer to install the shared Skill folder:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.1.0/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.1/skills/stop-that-shit
 ```
 
 Start a new task so the host discovers it. Skill only needs no Hook trust and
