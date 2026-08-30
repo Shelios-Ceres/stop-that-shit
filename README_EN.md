@@ -59,6 +59,23 @@ Runtime through four host Adapters.
 | **Skill + Guard** | Stop Ladder plus machine-enforced boundaries | Default; review the host Hook configuration |
 | **Skill only** | The Stop Ladder and task-mode guidance | Optional; no enforcement |
 
+## Changes in this fork
+
+Compared with upstream [`lennney/stop-that-shit`](https://github.com/lennney/stop-that-shit), this fork extends subagent authorization and task-contract parsing:
+
+- Adds `agents=allow`, which removes only the cumulative limit for **observable, explicit delegation**. `agents=N` retains its existing cumulative budget of `0–8`.
+- `agents=allow` does not disable the other Guard boundaries. The `review`, `answer`, and `monitor` modes, `files=`, dependency, and hash policies remain active; opaque or unbounded fan-out is still denied.
+- A Stop That Shit directive is now recognized only on the first non-empty line of the user message. Matching text in quotes, code blocks, labeled logs, or later lines cannot accidentally replace the task contract.
+- Extends Codex delegation-tool recognition, makes Hermes batch delegation accounting atomic, and records the active agent policy in Runtime status and audit events.
+- Adds regression coverage across Codex, Claude Code, OpenCode, and Hermes Agent CLI adapters.
+
+Install this fork to use these changes:
+
+```bash
+codex plugin marketplace add Shelios-Ceres/stop-that-shit
+codex plugin add stop-that-shit@stop-that-shit
+```
+
 ## Started with Codex and GPT-5.6, now works across agents
 
 The project started with Codex. Public records include exploratory runs on Codex

@@ -48,6 +48,23 @@ Event: evt_...
 | **Skill + Guard** | 同一份 Skill，加上机器可执行边界 | 默认；检查宿主 Hook 配置后启用 |
 | **只装 Skill** | Stop Ladder 和任务模式引导 | 可选；没有执行拦截 |
 
+## 本 Fork 的改动
+
+与上游 [`lennney/stop-that-shit`](https://github.com/lennney/stop-that-shit) 相比，本 Fork 主要补充了 subagent 授权和任务契约解析：
+
+- 新增 `agents=allow`：只取消**可观察、显式 delegation** 的累计数量上限；`agents=N` 仍保留原有的 `0–8` 累计预算。
+- `agents=allow` 不会关闭其他 Guard。`review` / `answer` / `monitor` 模式、`files=`、依赖和 hash 边界仍然生效；不透明或无法确定数量的 fan-out 仍会被拒绝。
+- Stop That Shit 指令现在只从用户消息的首个非空行生效，引用、代码块、带标签的日志以及后续行中的同名文本不会误改任务合同。
+- 补充 Codex delegation 工具识别、Hermes 批量 delegation 的原子计数，以及 Runtime 中的 agent policy 状态记录。
+- 为 Codex、Claude Code、OpenCode 和 Hermes Agent CLI 补充了对应回归测试。
+
+要安装包含这些改动的版本，请使用本 Fork：
+
+```bash
+codex plugin marketplace add Shelios-Ceres/stop-that-shit
+codex plugin add stop-that-shit@stop-that-shit
+```
+
 ## 从 Codex + GPT-5.6 开始，现在覆盖多种 Agent
 
 项目从 Codex 起步：公开记录保留了 Codex CLI `0.145.0` + `gpt-5.6-sol` 的探索运行，以及 Codex CLI `0.147.0` + `gpt-5.6-luna` 的定向 pilot。现在四个 Adapter 共用同一套任务边界核心；Codex 安装方式、GPT-5.6 记录和 paired eval 见 [EVIDENCE.md](EVIDENCE.md) 与 [Codex 对照测试](evals/codex-paired/README.md)。
