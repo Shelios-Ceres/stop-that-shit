@@ -11,8 +11,8 @@ actions, context responses, and permission denies. It records host effect as
 `unobserved`; a returned permission deny is not evidence that the host skipped
 the action.
 
-Version: 0.1.0-shelios.2 Stable Codex Install Path Release
-Release: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.2
+Version: 0.1.0-shelios.3 Distinct Codex Marketplace Release
+Release: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.3
 Upstream baseline: https://github.com/lennney/stop-that-shit/releases/tag/0.1.0
 Last updated: 2026-09-01
 
@@ -20,7 +20,7 @@ This tree is validated with deterministic Hook-schema simulations, real
 child-process stdin/stdout entrypoint tests, cross-platform path regression
 tests, and shared policy tests:
 
-- 193 tests pass across the runtime, unit, and integration suites, including the
+- 194 tests pass across the runtime, unit, and integration suites, including the
   preserved Codex tests, Claude child-process Hook simulations, OpenCode
   adapter/plugin regressions, and Hermes native-plugin/runtime tests; one
   optional installed OpenCode smoke is skipped when OpenCode 1.18.18 or newer
@@ -32,6 +32,12 @@ tests, and shared policy tests:
 - two independent Claude Hook processes cannot oversubscribe `agents=1`;
 - all checked-in `.cjs` files pass `node --check`, all JSON files parse, and the
   release allowlist passes with 135 files;
+- Codex Marketplace metadata, plugin metadata, installation selectors, and
+  paired-eval cache discovery resolve the distinct `shelios-plugins` and
+  `stop-that-shit` identities from checked-in manifests;
+- the built release package installs into an isolated Codex home as
+  `stop-that-shit@shelios-plugins`, with its cache at
+  `plugins/cache/shelios-plugins/stop-that-shit/0.1.0-shelios.3`;
 - the generated CaseBundle validator and its schema were not changed;
 - on a local Windows host, `claude plugin validate` reported no warnings and a
   live smoke session armed the Guard through both the `$stop-that-shit`
@@ -179,7 +185,7 @@ were run after the null result.
 
 ## Not yet verified
 
-The following are explicit limitations, not 0.1.0-shelios.2 release blockers. The project
+The following are explicit limitations, not 0.1.0-shelios.3 release blockers. The project
 does not require a large benchmark to make a probabilistic mitigation claim.
 
 - a multi-scenario live baseline/plugin matrix for the reduced candidate;
@@ -238,11 +244,11 @@ leading synthetic fixtures.
 Do not claim that Stop That Shit solves overengineering across coding agents or
 publish an improvement percentage from unit tests or this single scenario.
 
-The defensible 0.1.0-shelios.2 claim is:
+The defensible 0.1.0-shelios.3 claim is:
 
 > In Codex, Claude Code, OpenCode, and Hermes Agent CLI, Stop That Shit provides
 > a short on-demand decision ladder and enforces a few explicit task-authority
-> rules on covered host action paths. Hermes 0.1.0-shelios.2 coverage is limited to the
+> rules on covered host action paths. Hermes 0.1.0-shelios.3 coverage is limited to the
 > native Plugin callbacks `pre_llm_call` and `pre_tool_call`; Gateway support
 > refers to the restart lifecycle after plugin changes, not coverage of every
 > Hermes surface. It may reduce some forms of execution drift, but it does not

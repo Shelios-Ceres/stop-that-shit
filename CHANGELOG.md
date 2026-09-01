@@ -4,6 +4,26 @@
 
 No unreleased changes yet.
 
+## 0.1.0-shelios.3 — 2026-09-01 (Distinct Codex Marketplace / Codex Marketplace 独立命名)
+
+- Codex Marketplace ID 从 `stop-that-shit` 改为 `shelios-plugins`，插件 ID、
+  Skill 名和 `$stop-that-shit` 命令保持不变，缓存路径不再出现两个同名层级。
+  / The Codex Marketplace ID is now `shelios-plugins` while the plugin ID,
+  Skill name, and `$stop-that-shit` command remain stable.
+- Codex 安装、升级、卸载文档使用新的限定符
+  `stop-that-shit@shelios-plugins`，并明确要求移除旧 Marketplace 后再安装，
+  防止两个身份并存。
+  / Codex installation and migration guidance uses the new qualified selector
+  and removes the old Marketplace identity before installation.
+- paired-eval 不再硬编码 Marketplace 与插件目录；它从发布清单读取两个身份，
+  并由回归测试锁定清单、selector 和缓存路径的一致性。
+  / The paired-eval harness now resolves Marketplace and plugin identities from
+  their manifests instead of duplicating cache-path constants.
+- 发布门禁通过 194 项测试、18/18 个可执行案例和 135 文件 release
+  allowlist；1 项可选 OpenCode 安装后 smoke 按环境跳过。
+  / Release gates pass 194 tests, 18/18 executable case arms, and the 135-file
+  release allowlist; one optional installed OpenCode smoke is skipped.
+
 ## 0.1.0-shelios.2 — 2026-09-01 (Stable Codex Install Path / Codex 稳定安装路径)
 
 - Codex 安装命令现在固定到明确的 release tag，避免日常插件随 `main` 漂移。

@@ -19,6 +19,18 @@ test('Codex plugin manifest and its preserved hook discovery paths exist', () =>
   assert.deepEqual(Object.keys(hooks.hooks).sort(), ['PreToolUse', 'UserPromptSubmit']);
 });
 
+test('Codex marketplace identity is distinct from the stable plugin identity', () => {
+  const marketplace = JSON.parse(fs.readFileSync(
+    path.join(root, '.agents', 'plugins', 'marketplace.json'),
+    'utf8'
+  ));
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, '.codex-plugin', 'plugin.json'), 'utf8'));
+  assert.equal(marketplace.name, 'shelios-plugins');
+  assert.equal(manifest.name, 'stop-that-shit');
+  assert.equal(marketplace.plugins[0].name, manifest.name);
+  assert.equal(marketplace.plugins[0].source.path, './');
+});
+
 test('Codex presentation metadata uses valid local assets', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, '.codex-plugin', 'plugin.json'), 'utf8'));
   for (const field of ['composerIcon', 'logo']) {
@@ -44,6 +56,7 @@ test('the packaged Skill remains useful without the Guard hooks', () => {
 
 test('Codex install docs pin the release and forbid guessed plugin cache paths', () => {
   const expected = `codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref ${packageJson.version}`;
+  const expectedSelector = 'codex plugin add stop-that-shit@shelios-plugins';
   for (const relative of ['README.md', 'README_EN.md', 'INSTALL.md', 'INSTALL_FOR_AGENTS.md']) {
     const contents = fs.readFileSync(path.join(root, relative), 'utf8');
     const commands = (contents.match(/^\s*codex plugin marketplace add Shelios-Ceres\/stop-that-shit.*$/gm) || [])
@@ -51,6 +64,29 @@ test('Codex install docs pin the release and forbid guessed plugin cache paths',
     assert.ok(commands.length > 0, `${relative} must include the remote Codex install command`);
     assert.deepEqual([...new Set(commands)], [expected], `${relative} must pin the package version`);
   }
+  for (const relative of [
+    'README.md',
+    'README_EN.md',
+    'INSTALL.md',
+    'INSTALL_FOR_AGENTS.md',
+    'evals/codex-paired/README.md'
+  ]) {
+    const contents = fs.readFileSync(path.join(root, relative), 'utf8');
+    const selectors = (contents.match(/^\s*codex plugin add stop-that-shit@\S+\s*$/gm) || [])
+      .map((line) => line.trim());
+    assert.ok(selectors.length > 0, `${relative} must include the qualified Codex plugin selector`);
+    assert.deepEqual([...new Set(selectors)], [expectedSelector], `${relative} must use the Codex marketplace identity`);
+  }
+
+  for (const relative of ['README.md', 'README_EN.md']) {
+    const contents = fs.readFileSync(path.join(root, relative), 'utf8');
+    const migrationLinks = contents.match(/INSTALL\.md#upgrade-from-010-shelios2/g) || [];
+    assert.ok(migrationLinks.length >= 2, `${relative} must route both Codex install entries through migration guidance`);
+  }
+
+  const installGuide = fs.readFileSync(path.join(root, 'INSTALL.md'), 'utf8');
+  assert.match(installGuide, /codex plugin remove stop-that-shit@shelios-plugins/);
+  assert.match(installGuide, /codex plugin marketplace remove shelios-plugins/);
 
   const skill = fs.readFileSync(path.join(root, 'skills', 'stop-that-shit', 'SKILL.md'), 'utf8');
   const agentInstall = fs.readFileSync(path.join(root, 'INSTALL_FOR_AGENTS.md'), 'utf8');

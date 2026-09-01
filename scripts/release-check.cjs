@@ -46,6 +46,7 @@ for (const entry of releaseManifest.include) {
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const codexPlugin = JSON.parse(fs.readFileSync(path.join(root, '.codex-plugin', 'plugin.json'), 'utf8'));
+const codexMarketplace = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'plugins', 'marketplace.json'), 'utf8'));
 const claudePlugin = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8'));
 const claudeMarketplace = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'marketplace.json'), 'utf8'));
 const hermesPluginText = fs.readFileSync(path.join(root, '.hermes-plugin', 'plugin.yaml'), 'utf8');
@@ -56,6 +57,16 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(expectedVersion)) {
 }
 if (expectedVersion !== codexPlugin.version) fail('package and Codex plugin versions differ');
 if (expectedVersion !== claudePlugin.version) fail('package and Claude plugin versions differ');
+if (codexMarketplace.name !== 'shelios-plugins') fail('Codex marketplace identity is not shelios-plugins');
+if (
+  codexMarketplace.plugins?.[0]?.name !== codexPlugin.name ||
+  codexMarketplace.plugins?.[0]?.source?.path !== './'
+) {
+  fail('Codex marketplace does not point at the root plugin');
+}
+if (codexMarketplace.name === codexPlugin.name) {
+  fail('Codex marketplace and plugin identities must remain distinct');
+}
 const hermesVersion = hermesPluginText.match(/^version:\s*["']?([^"'\s]+)["']?\s*$/m)?.[1];
 if (expectedVersion !== hermesVersion) fail('package and Hermes plugin versions differ');
 if (!evidenceText.includes(`Version: ${expectedVersion} `)) {

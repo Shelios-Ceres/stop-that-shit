@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const {
   buildPlan,
   buildCodexArgs,
+  codexPluginIdentity,
   assertInstalledPluginMatchesSource,
   assertIsolatedPluginList,
   assertNoAgentInstructions,
@@ -139,8 +140,9 @@ test('paired eval requires an explicit option for danger-full-access', () => {
 });
 
 test('paired eval rejects a Codex home with another enabled plugin', () => {
-  const clean = 'stop-that-shit@stop-that-shit  installed, enabled\n';
-  assert.deepEqual(assertIsolatedPluginList(clean), ['stop-that-shit@stop-that-shit']);
+  const identity = codexPluginIdentity();
+  const clean = `${identity.selector}  installed, enabled\n`;
+  assert.deepEqual(assertIsolatedPluginList(clean), [identity.selector]);
 
   const contaminated = [
     clean.trimEnd(),
@@ -154,14 +156,15 @@ test('paired eval rejects a Codex home with another enabled plugin', () => {
 
 test('paired eval rejects stale installed plugin package metadata', (t) => {
   const sourceRoot = path.resolve(__dirname, '..');
+  const identity = codexPluginIdentity(sourceRoot);
   const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'sts-cache-'));
   t.after(() => fs.rmSync(codexHome, { recursive: true, force: true }));
   const cacheRoot = path.join(
     codexHome,
     'plugins',
     'cache',
-    'stop-that-shit',
-    'stop-that-shit',
+    identity.marketplaceName,
+    identity.pluginName,
     packageJson.version
   );
   fs.mkdirSync(cacheRoot, { recursive: true });

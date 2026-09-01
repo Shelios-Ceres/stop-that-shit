@@ -90,7 +90,7 @@ $env:CODEX_HOME = 'C:\path\to\sts-eval-codex-home'
 $env:STS_EVAL_CODEX_HOME = $env:CODEX_HOME
 codex login
 codex plugin marketplace add <local-checkout-root>
-codex plugin add stop-that-shit@stop-that-shit
+codex plugin add stop-that-shit@shelios-plugins
 codex
 ```
 

@@ -52,9 +52,10 @@ Event: evt_...
 
 与上游 [`lennney/stop-that-shit`](https://github.com/lennney/stop-that-shit) 相比，本 Fork 主要补充了 subagent 授权和任务契约解析：
 
-当前正式版本：[`0.1.0-shelios.2`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.2)，基于上游 `0.1.0`。
+当前正式版本：[`0.1.0-shelios.3`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.3)，基于上游 `0.1.0`。
 
 - 新增 `agents=allow`：只取消**可观察、显式 delegation** 的累计数量上限；`agents=N` 仍保留原有的 `0–8` 累计预算。
+- Codex Marketplace 使用独立标识 `shelios-plugins`，插件 ID 和 Skill 命令仍为 `stop-that-shit`，避免缓存路径中的 Marketplace 与插件层重名。
 - `agents=allow` 不会关闭其他 Guard。`review` / `answer` / `monitor` 模式、`files=`、依赖和 hash 边界仍然生效；不透明或无法确定数量的 fan-out 仍会被拒绝。
 - Stop That Shit 指令现在只从用户消息的首个非空行生效，引用、代码块、带标签的日志以及后续行中的同名文本不会误改任务合同。
 - 补充 Codex delegation 工具识别、Hermes 批量 delegation 的原子计数，以及 Runtime 中的 agent policy 状态记录。
@@ -62,9 +63,12 @@ Event: evt_...
 
 要安装包含这些改动的版本，请使用本 Fork：
 
+如果已经安装 `0.1.0-shelios.2`，请先按[升级步骤](INSTALL.md#upgrade-from-010-shelios2)
+移除旧插件和旧 Marketplace，不能直接叠加安装。
+
 ```bash
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.2
-codex plugin add stop-that-shit@stop-that-shit
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.3
+codex plugin add stop-that-shit@shelios-plugins
 ```
 
 ## 从 Codex + GPT-5.6 开始，现在覆盖多种 Agent
@@ -93,9 +97,11 @@ claude plugin install stop-that-shit@stop-that-shit
 
 ### Codex
 
+从 `0.1.0-shelios.2` 升级时，请先完成[旧身份迁移](INSTALL.md#upgrade-from-010-shelios2)。
+
 ```bash
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.2
-codex plugin add stop-that-shit@stop-that-shit
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.3
+codex plugin add stop-that-shit@shelios-plugins
 ```
 
 重启 Codex。在新的 CLI TUI 中输入 `/hooks`，检查命令后信任 `UserPromptSubmit` 和 `PreToolUse`。也可以把 [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md) 交给 Codex，让它完成非交互步骤。
@@ -258,7 +264,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 Codex 仍可使用远程 Skill Installer：
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.2/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.3/skills/stop-that-shit
 ```
 
 新开任务后，独立 Claude Code Skill 用 `/stop-that-shit`，作为 plugin 安装时用 namespaced `/stop-that-shit:stop-that-shit`；Codex 用 `$stop-that-shit`。Skill-only 路径不需要 Hook 信任，但不能机器拦截越界动作，也不会改变宿主原有的 sandbox 和 approval 设置。

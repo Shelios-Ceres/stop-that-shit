@@ -112,11 +112,35 @@ function buildCodexArgs(cell, { model, reasoning, workspace, dangerFullAccess = 
   return args;
 }
 
-function assertIsolatedPluginList(output) {
+function codexPluginIdentity(sourceRoot = path.resolve(__dirname, '..')) {
+  const marketplace = JSON.parse(fs.readFileSync(
+    path.join(sourceRoot, '.agents', 'plugins', 'marketplace.json'),
+    'utf8'
+  ));
+  const manifest = JSON.parse(fs.readFileSync(
+    path.join(sourceRoot, '.codex-plugin', 'plugin.json'),
+    'utf8'
+  ));
+  const marketplaceName = marketplace.name;
+  const pluginName = manifest.name;
+  if (!marketplaceName || !pluginName) {
+    throw new Error('Codex marketplace and plugin names are required');
+  }
+  if (!marketplace.plugins?.some((plugin) => plugin.name === pluginName)) {
+    throw new Error(`Codex marketplace does not expose plugin: ${pluginName}`);
+  }
+  return {
+    marketplaceName,
+    pluginName,
+    selector: `${pluginName}@${marketplaceName}`
+  };
+}
+
+function assertIsolatedPluginList(output, identity = codexPluginIdentity()) {
   const enabled = output.split(/\r?\n/).map((line) => line.trim())
     .filter((line) => /\benabled\b/i.test(line))
     .map((line) => line.split(/\s+/)[0]);
-  const expected = 'stop-that-shit@stop-that-shit';
+  const expected = identity.selector;
   if (enabled.length !== 1 || enabled[0] !== expected) {
     const actual = enabled.length > 0 ? enabled.join(', ') : 'none';
     throw new Error(`only Stop That Shit may be enabled in the eval Codex home; found: ${actual}`);
@@ -138,7 +162,15 @@ function treeFiles(root, relative = '') {
 }
 
 function assertInstalledPluginMatchesSource(sourceRoot, codexHome, version) {
-  const cacheRoot = path.join(codexHome, 'plugins', 'cache', 'stop-that-shit', 'stop-that-shit', version);
+  const identity = codexPluginIdentity(sourceRoot);
+  const cacheRoot = path.join(
+    codexHome,
+    'plugins',
+    'cache',
+    identity.marketplaceName,
+    identity.pluginName,
+    version
+  );
   if (!fs.existsSync(cacheRoot)) throw new Error(`installed plugin cache is missing: ${cacheRoot}`);
   for (const runtimePath of PLUGIN_RUNTIME_PATHS) {
     const sourceFiles = treeFiles(sourceRoot, runtimePath).sort();
@@ -644,6 +676,7 @@ module.exports = {
   buildCodexArgs,
   changedPaths,
   changedText,
+  codexPluginIdentity,
   countHookBlocks,
   evaluateAcceptance,
   loadCases,

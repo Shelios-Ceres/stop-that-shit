@@ -1,7 +1,7 @@
-# Install Stop That Shit 0.1.0-shelios.2
+# Install Stop That Shit 0.1.0-shelios.3
 
 The current multi-platform release is
-[`0.1.0-shelios.2`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.2), based on upstream [`0.1.0`](https://github.com/lennney/stop-that-shit/releases/tag/0.1.0).
+[`0.1.0-shelios.3`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.3), based on upstream [`0.1.0`](https://github.com/lennney/stop-that-shit/releases/tag/0.1.0).
 
 If an agent is doing the installation for you, give it
 [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md). That guide separates commands
@@ -39,11 +39,28 @@ The Guard requires Node.js 18 or newer. Add the repository as a Codex
 marketplace, then install the plugin:
 
 ```powershell
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.2
-codex plugin add stop-that-shit@stop-that-shit
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.3
+codex plugin add stop-that-shit@shelios-plugins
 ```
 
 Restart Codex after installation.
+
+### Upgrade from `0.1.0-shelios.2`
+
+This release changes only the Codex Marketplace identity. Remove the old
+qualified installation before adding the new one so both identities cannot be
+enabled at the same time:
+
+```powershell
+codex plugin remove stop-that-shit@stop-that-shit
+codex plugin marketplace remove stop-that-shit
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.3
+codex plugin add stop-that-shit@shelios-plugins
+```
+
+The plugin ID and `$stop-that-shit` Skill command are unchanged. Restart Codex,
+review the two Hook commands again, and use a new task so the host reloads the
+Skill catalog under the new Marketplace identity.
 
 ## Verify the source
 
@@ -202,7 +219,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, ask the built-in Skill Installer to install the shared Skill folder:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.2/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.3/skills/stop-that-shit
 ```
 
 Start a new task so the host discovers it. Skill only needs no Hook trust and
@@ -216,7 +233,7 @@ checkout with:
 
 ```powershell
 codex plugin marketplace add <local-checkout-root>
-codex plugin add stop-that-shit@stop-that-shit
+codex plugin add stop-that-shit@shelios-plugins
 ```
 
 Use this local-checkout path only for isolated plugin development. The local
@@ -233,8 +250,8 @@ marketplace when no longer needed. Skill only can be removed separately from
 the host Skills directory.
 
 ```powershell
-codex plugin remove stop-that-shit@stop-that-shit
-codex plugin marketplace remove stop-that-shit
+codex plugin remove stop-that-shit@shelios-plugins
+codex plugin marketplace remove shelios-plugins
 ```
 
 For a Skill-only installation, remove its exact installed directory, then start

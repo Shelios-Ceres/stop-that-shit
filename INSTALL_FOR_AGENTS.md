@@ -40,16 +40,24 @@ general improvement in model behavior.
 ## Codex
 
 1. Confirm that `codex` is available and Node.js 18 or newer is installed.
-2. Run these commands one at a time:
+2. Run `codex plugin list`. If `stop-that-shit@stop-that-shit` is installed,
+   migrate it first:
 
    ```powershell
-   codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.2
-   codex plugin add stop-that-shit@stop-that-shit
+   codex plugin remove stop-that-shit@stop-that-shit
+   codex plugin marketplace remove stop-that-shit
    ```
 
-3. Ask the user to restart Codex.
-4. Ask the user to open a fresh Codex CLI TUI and enter `/hooks`.
-5. Stop and let the user inspect and trust the Hook commands.
+3. Run these commands one at a time:
+
+   ```powershell
+   codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.3
+   codex plugin add stop-that-shit@shelios-plugins
+   ```
+
+4. Ask the user to restart Codex.
+5. Ask the user to open a fresh Codex CLI TUI and enter `/hooks`.
+6. Stop and let the user inspect and trust the Hook commands.
 
 A correct Guard installation has these two active events:
 
@@ -109,7 +117,7 @@ general improvement in model behavior.
 If the user does not want Hooks, install the advisory Skill instead:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.2/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.3/skills/stop-that-shit
 ```
 
 Ask the user to start a new Codex task after installation. Explain that this
