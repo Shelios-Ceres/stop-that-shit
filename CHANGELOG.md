@@ -4,6 +4,25 @@
 
 No unreleased changes yet.
 
+## 0.1.0-shelios.2 — 2026-09-01 (Stable Codex Install Path / Codex 稳定安装路径)
+
+- Codex 安装命令现在固定到明确的 release tag，避免日常插件随 `main` 漂移。
+  / Codex installation now pins a named release tag instead of following
+  `main`. This does not claim that Git tags are technically immutable.
+- 安装与 Skill 指令明确要求使用宿主提供的路径或 `codex plugin list`，禁止
+  手工拼接 `plugins/cache`，并记录 Marketplace / Plugin / Version 三层结构。
+  / Installation and Skill guidance now require host-provided paths or
+  `codex plugin list` instead of manually constructing cache paths.
+- 本地源码 Marketplace 被明确限定为隔离开发用途；Codex 稳定日常安装使用 Git
+  tag，避免把 `dist`、`node_modules` 等开发内容复制到活动缓存。
+  / Local-checkout marketplaces are explicitly development-only; stable Codex
+  use installs from the Git tag so build output and dependencies do not enter
+  the active cache.
+- 发布门禁通过 193 项测试、18/18 个可执行案例和 135 文件 release
+  allowlist；1 项可选 OpenCode 安装后 smoke 按环境跳过。
+  / Release gates pass 193 tests, 18/18 executable case arms, and the 135-file
+  release allowlist; one optional installed OpenCode smoke is skipped.
+
 ## 0.1.0-shelios.1 — 2026-08-30 (Shelios Fork Release / Shelios Fork 正式版)
 
 > **基于上游 0.1.0，增加显式的不限累计 subagent 策略，同时保留其他任务边界。**

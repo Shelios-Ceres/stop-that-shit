@@ -63,7 +63,7 @@ Runtime through four host Adapters.
 
 Compared with upstream [`lennney/stop-that-shit`](https://github.com/lennney/stop-that-shit), this fork extends subagent authorization and task-contract parsing:
 
-Current release: [`0.1.0-shelios.1`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.1), based on upstream `0.1.0`.
+Current release: [`0.1.0-shelios.2`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.2), based on upstream `0.1.0`.
 
 - Adds `agents=allow`, which removes only the cumulative limit for **observable, explicit delegation**. `agents=N` retains its existing cumulative budget of `0–8`.
 - `agents=allow` does not disable the other Guard boundaries. The `review`, `answer`, and `monitor` modes, `files=`, dependency, and hash policies remain active; opaque or unbounded fan-out is still denied.
@@ -74,7 +74,7 @@ Current release: [`0.1.0-shelios.1`](https://github.com/Shelios-Ceres/stop-that-
 Install this fork to use these changes:
 
 ```bash
-codex plugin marketplace add Shelios-Ceres/stop-that-shit
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.2
 codex plugin add stop-that-shit@stop-that-shit
 ```
 
@@ -109,7 +109,7 @@ Restart Claude Code or run `/reload-plugins`, then invoke:
 ### Codex
 
 ```bash
-codex plugin marketplace add Shelios-Ceres/stop-that-shit
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.2
 codex plugin add stop-that-shit@stop-that-shit
 ```
 
@@ -314,7 +314,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, the remote Skill Installer path is:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.1/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.2/skills/stop-that-shit
 ```
 
 Start a new task, then invoke the host-native Skill form. A standalone Claude Code skill is `/stop-that-shit`; an installed plugin skill is namespaced as `/stop-that-shit:stop-that-shit`; Codex uses `$stop-that-shit`. This path needs no Hook trust,

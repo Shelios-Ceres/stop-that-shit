@@ -52,7 +52,7 @@ Event: evt_...
 
 与上游 [`lennney/stop-that-shit`](https://github.com/lennney/stop-that-shit) 相比，本 Fork 主要补充了 subagent 授权和任务契约解析：
 
-当前正式版本：[`0.1.0-shelios.1`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.1)，基于上游 `0.1.0`。
+当前正式版本：[`0.1.0-shelios.2`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.2)，基于上游 `0.1.0`。
 
 - 新增 `agents=allow`：只取消**可观察、显式 delegation** 的累计数量上限；`agents=N` 仍保留原有的 `0–8` 累计预算。
 - `agents=allow` 不会关闭其他 Guard。`review` / `answer` / `monitor` 模式、`files=`、依赖和 hash 边界仍然生效；不透明或无法确定数量的 fan-out 仍会被拒绝。
@@ -63,7 +63,7 @@ Event: evt_...
 要安装包含这些改动的版本，请使用本 Fork：
 
 ```bash
-codex plugin marketplace add Shelios-Ceres/stop-that-shit
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.2
 codex plugin add stop-that-shit@stop-that-shit
 ```
 
@@ -94,7 +94,7 @@ claude plugin install stop-that-shit@stop-that-shit
 ### Codex
 
 ```bash
-codex plugin marketplace add Shelios-Ceres/stop-that-shit
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.2
 codex plugin add stop-that-shit@stop-that-shit
 ```
 
@@ -258,7 +258,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 Codex 仍可使用远程 Skill Installer：
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.1/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.2/skills/stop-that-shit
 ```
 
 新开任务后，独立 Claude Code Skill 用 `/stop-that-shit`，作为 plugin 安装时用 namespaced `/stop-that-shit:stop-that-shit`；Codex 用 `$stop-that-shit`。Skill-only 路径不需要 Hook 信任，但不能机器拦截越界动作，也不会改变宿主原有的 sandbox 和 approval 设置。

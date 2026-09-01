@@ -43,7 +43,7 @@ general improvement in model behavior.
 2. Run these commands one at a time:
 
    ```powershell
-   codex plugin marketplace add Shelios-Ceres/stop-that-shit
+   codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.2
    codex plugin add stop-that-shit@stop-that-shit
    ```
 
@@ -109,9 +109,16 @@ general improvement in model behavior.
 If the user does not want Hooks, install the advisory Skill instead:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.1/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.2/skills/stop-that-shit
 ```
 
 Ask the user to start a new Codex task after installation. Explain that this
 mode has no runtime enforcement and cannot change Codex sandbox or approval
 settings.
+
+When an installed Skill must be inspected, use the exact path or root alias
+provided by the Skills catalog. Do not construct a path under
+`~/.codex/plugins/cache` from memory. If the supplied path cannot be opened,
+run `codex plugin list` to obtain the plugin root and resolve the manifest's
+relative `skills` path from there. Installed cache paths contain Marketplace,
+Plugin, and Version layers.

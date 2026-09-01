@@ -11,16 +11,16 @@ actions, context responses, and permission denies. It records host effect as
 `unobserved`; a returned permission deny is not evidence that the host skipped
 the action.
 
-Version: 0.1.0-shelios.1 Shelios Fork Release
-Release: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.1
+Version: 0.1.0-shelios.2 Stable Codex Install Path Release
+Release: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.2
 Upstream baseline: https://github.com/lennney/stop-that-shit/releases/tag/0.1.0
-Last updated: 2026-08-30
+Last updated: 2026-09-01
 
 This tree is validated with deterministic Hook-schema simulations, real
 child-process stdin/stdout entrypoint tests, cross-platform path regression
 tests, and shared policy tests:
 
-- 192 tests pass across the runtime, unit, and integration suites, including the
+- 193 tests pass across the runtime, unit, and integration suites, including the
   preserved Codex tests, Claude child-process Hook simulations, OpenCode
   adapter/plugin regressions, and Hermes native-plugin/runtime tests; one
   optional installed OpenCode smoke is skipped when OpenCode 1.18.18 or newer
@@ -179,7 +179,7 @@ were run after the null result.
 
 ## Not yet verified
 
-The following are explicit limitations, not 0.1.0-shelios.1 release blockers. The project
+The following are explicit limitations, not 0.1.0-shelios.2 release blockers. The project
 does not require a large benchmark to make a probabilistic mitigation claim.
 
 - a multi-scenario live baseline/plugin matrix for the reduced candidate;
@@ -238,11 +238,11 @@ leading synthetic fixtures.
 Do not claim that Stop That Shit solves overengineering across coding agents or
 publish an improvement percentage from unit tests or this single scenario.
 
-The defensible 0.1.0-shelios.1 claim is:
+The defensible 0.1.0-shelios.2 claim is:
 
 > In Codex, Claude Code, OpenCode, and Hermes Agent CLI, Stop That Shit provides
 > a short on-demand decision ladder and enforces a few explicit task-authority
-> rules on covered host action paths. Hermes 0.1.0-shelios.1 coverage is limited to the
+> rules on covered host action paths. Hermes 0.1.0-shelios.2 coverage is limited to the
 > native Plugin callbacks `pre_llm_call` and `pre_tool_call`; Gateway support
 > refers to the restart lifecycle after plugin changes, not coverage of every
 > Hermes surface. It may reduce some forms of execution drift, but it does not

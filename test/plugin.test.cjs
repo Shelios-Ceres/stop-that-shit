@@ -8,6 +8,7 @@ const { spawnSync } = require('node:child_process');
 const test = require('node:test');
 
 const root = path.join(__dirname, '..');
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 test('Codex plugin manifest and its preserved hook discovery paths exist', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, '.codex-plugin', 'plugin.json'), 'utf8'));
@@ -39,6 +40,25 @@ test('the packaged Skill remains useful without the Guard hooks', () => {
   assert.match(skill, /works without the Guard/i);
   assert.match(skill, /advisory/i);
   assert.match(skill, /Do the requested work\. Keep necessary consequences\. Stop everything else\./);
+});
+
+test('Codex install docs pin the release and forbid guessed plugin cache paths', () => {
+  const expected = `codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref ${packageJson.version}`;
+  for (const relative of ['README.md', 'README_EN.md', 'INSTALL.md', 'INSTALL_FOR_AGENTS.md']) {
+    const contents = fs.readFileSync(path.join(root, relative), 'utf8');
+    const commands = (contents.match(/^\s*codex plugin marketplace add Shelios-Ceres\/stop-that-shit.*$/gm) || [])
+      .map((line) => line.trim());
+    assert.ok(commands.length > 0, `${relative} must include the remote Codex install command`);
+    assert.deepEqual([...new Set(commands)], [expected], `${relative} must pin the package version`);
+  }
+
+  const skill = fs.readFileSync(path.join(root, 'skills', 'stop-that-shit', 'SKILL.md'), 'utf8');
+  const agentInstall = fs.readFileSync(path.join(root, 'INSTALL_FOR_AGENTS.md'), 'utf8');
+  for (const contents of [skill, agentInstall]) {
+    assert.match(contents, /Do not (?:reconstruct|construct) a path under[\s\S]{0,80}plugins\/cache/i);
+    assert.match(contents, /codex plugin list/);
+    assert.match(contents, /Marketplace,[\s\S]{0,40}Plugin,[\s\S]{0,40}Version/i);
+  }
 });
 
 test('Codex hook commands keep resolving the plugin root inside Node and stay shell-agnostic', () => {

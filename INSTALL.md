@@ -1,7 +1,7 @@
-# Install Stop That Shit 0.1.0-shelios.1
+# Install Stop That Shit 0.1.0-shelios.2
 
 The current multi-platform release is
-[`0.1.0-shelios.1`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.1), based on upstream [`0.1.0`](https://github.com/lennney/stop-that-shit/releases/tag/0.1.0).
+[`0.1.0-shelios.2`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.2), based on upstream [`0.1.0`](https://github.com/lennney/stop-that-shit/releases/tag/0.1.0).
 
 If an agent is doing the installation for you, give it
 [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md). That guide separates commands
@@ -39,7 +39,7 @@ The Guard requires Node.js 18 or newer. Add the repository as a Codex
 marketplace, then install the plugin:
 
 ```powershell
-codex plugin marketplace add Shelios-Ceres/stop-that-shit
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.2
 codex plugin add stop-that-shit@stop-that-shit
 ```
 
@@ -202,7 +202,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, ask the built-in Skill Installer to install the shared Skill folder:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.1/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.2/skills/stop-that-shit
 ```
 
 Start a new task so the host discovers it. Skill only needs no Hook trust and
@@ -218,6 +218,13 @@ checkout with:
 codex plugin marketplace add <local-checkout-root>
 codex plugin add stop-that-shit@stop-that-shit
 ```
+
+Use this local-checkout path only for isolated plugin development. The local
+Marketplace copies the checkout into the plugin cache, so build output,
+dependencies, and repository metadata inside that root can also be copied.
+For normal use, install the pinned Git tag shown above. When locating an
+installed Skill, use the path supplied by the Skills catalog or `codex plugin
+list`; do not construct a path below `plugins/cache` manually.
 
 ## Disable or uninstall
 
