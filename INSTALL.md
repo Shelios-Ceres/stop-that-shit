@@ -1,7 +1,7 @@
-# Install Stop That Shit 0.1.0-shelios.3
+# Install Stop That Shit 0.2.1-shelios.1
 
 The current multi-platform release is
-[`0.1.0-shelios.3`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.3), based on upstream [`0.1.0`](https://github.com/lennney/stop-that-shit/releases/tag/0.1.0).
+[`0.2.1-shelios.1`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.1), based on upstream [`0.2.1`](https://github.com/lennney/stop-that-shit/releases/tag/0.2.1).
 
 If an agent is doing the installation for you, give it
 [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md). That guide separates commands
@@ -39,22 +39,29 @@ The Guard requires Node.js 18 or newer. Add the repository as a Codex
 marketplace, then install the plugin:
 
 ```powershell
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.3
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.1
 codex plugin add stop-that-shit@shelios-plugins
 ```
 
 Restart Codex after installation.
 
+### Upgrade from `0.1.0-shelios.3`
+
+Keep the existing `shelios-plugins` Marketplace and install the new pinned
+release using the two commands above. The plugin ID is unchanged, so this
+upgrade does not require uninstalling the plugin or migrating its runtime data.
+Use a new task after installation. Review `/hooks` if the host requests it.
+
 ### Upgrade from `0.1.0-shelios.2`
 
-This release changes only the Codex Marketplace identity. Remove the old
+This older release used a different Codex Marketplace identity. Remove the old
 qualified installation before adding the new one so both identities cannot be
 enabled at the same time:
 
 ```powershell
 codex plugin remove stop-that-shit@stop-that-shit
 codex plugin marketplace remove stop-that-shit
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.3
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.1
 codex plugin add stop-that-shit@shelios-plugins
 ```
 
@@ -206,6 +213,39 @@ These steps are not required every time the plugin is used. Restart the
 corresponding Hermes process only after enabling, disabling, updating, rolling
 back, or reinstalling the plugin.
 
+## Pi Coding Agent
+
+The Pi adapter is tested with `@earendil-works/pi-coding-agent` `0.84.4`, which
+requires Node.js `22.19.0` or newer. Pi packages execute with full system access;
+review the source and use a pinned release before installing it from Git.
+
+From a checkout that contains the Pi adapter, install it globally:
+
+```bash
+pi install /absolute/path/to/stop-that-shit
+```
+
+Add `-l` for a project-scoped installation. The `0.2.1-shelios.1` tagged release contains
+the Pi adapter; use this pinned Git ref instead of an unpinned branch:
+
+```bash
+pi install git:github.com/Shelios-Ceres/stop-that-shit@0.2.1-shelios.1
+```
+
+Start a new Pi process, or run `/reload` in the TUI after changing package
+resources. Arm the Guard with either form:
+
+```text
+/skill:stop-that-shit review -- Review this diff. Report findings; do not edit.
+$stop-that-shit review -- Review this diff. Report findings; do not edit.
+```
+
+Pi contract changes submitted while an Agent turn is streaming are not applied
+to that turn; submit them again after Pi is idle. The adapter enforces parent
+budgeting for the documented optional `subagent` tool, but does not claim that
+separate child Pi processes inherit the contract. Remove the same source with
+`pi remove <source>`.
+
 ## Optional: Skill only
 
 If you do not want command Hooks, install only the advisory Skill. For Claude
@@ -219,7 +259,13 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, ask the built-in Skill Installer to install the shared Skill folder:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.3/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.1-shelios.1/skills/stop-that-shit
+```
+
+To install only Stop That Shit Slop from a `0.2.1-shelios.1` checkout:
+
+```bash
+npx skills add ./skills/stss --global
 ```
 
 Start a new task so the host discovers it. Skill only needs no Hook trust and

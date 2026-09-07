@@ -74,6 +74,7 @@ test('maps real Hermes hook envelope fields to ControlEvent v1', () => {
   assert.equal(actionEvent.action.name, 'write_file');
   assert.equal(actionEvent.action.mutability, 'write');
   assert.deepEqual(actionEvent.action.affectedPaths, ['notes.txt']);
+  assert.equal(actionEvent.action.cwd, root);
 });
 
 test('classifies only the explicit Hermes tool table and reuses shell evidence', () => {
@@ -142,6 +143,16 @@ test('extracts write_file, default replace, and every real Hermes V4A patch targ
     ['src/new.cjs', 'src/old.cjs', 'src/moved.cjs', 'test/obsolete.test.cjs']
   );
   assert.deepEqual(extractAffectedPaths('read_file', { path: 'README.md' }, root), []);
+});
+
+test('Hermes UNC paths normalize relative to a Windows share cwd', () => {
+  const { extractAffectedPaths } = classifier();
+  assert.equal(
+    extractAffectedPaths('write_file', {
+      path: '//SERVER/SHARE/REPO/src/Allowed.cjs'
+    }, String.raw`\\server\share\repo`)[0],
+    'src/Allowed.cjs'
+  );
 });
 
 test('review returns context then blocks write while change allows it', (t) => {

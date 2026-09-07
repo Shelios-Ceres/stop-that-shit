@@ -39,9 +39,17 @@ function detectHashIntent(toolName, toolInput) {
 }
 
 function normalizePath(value, cwd) {
-  let normalized = String(value || '').trim().replace(/^['"]|['"]$/g, '').replace(/\\/g, '/');
-  if (cwd && nodePath.isAbsolute(normalized)) {
-    normalized = nodePath.relative(String(cwd), normalized).replace(/\\/g, '/');
+  const raw = String(value || '').trim().replace(/^['"]|['"]$/g, '');
+  if (!raw) return '';
+  const windowsStyle = /^[A-Za-z]:[\\/]|^\\\\/.test(raw)
+    || /^[A-Za-z]:[\\/]|^\\\\/.test(String(cwd || ''))
+    || (process.platform === 'win32' && (/^\/\//.test(raw) || /^\/\//.test(String(cwd || ''))));
+  let normalized = raw.replace(/\\/g, '/');
+  if (cwd && windowsStyle && (nodePath.win32.isAbsolute(raw) || /^\/\//.test(raw))
+    && (nodePath.win32.isAbsolute(String(cwd)) || /^\/\//.test(String(cwd)))) {
+    normalized = nodePath.win32.relative(String(cwd), raw).replace(/\\/g, '/');
+  } else if (cwd && nodePath.posix.isAbsolute(normalized)) {
+    normalized = nodePath.posix.relative(String(cwd), normalized).replace(/\\/g, '/');
   }
   return normalized.replace(/^\.\//, '');
 }

@@ -153,12 +153,130 @@ test('files contract blocks a patch outside the declared write boundary', (t) =>
   assert.match(output.hookSpecificOutput.permissionDecisionReason, /S\/PATH_OUTSIDE_CONTRACT/);
 });
 
+test('files contract preserves mixed-case paths and keeps differently cased paths outside the boundary', (t) => {
+  const options = workspace(t);
+  handleHook(prompt('files-case-session', '$stop-that-shit lock change files=/Workspace/example/Config.toml -- update config'), options);
+
+  assert.equal(handleHook(pre('files-case-session', 'Write', {
+    file_path: '/Workspace/example/Config.toml', content: 'x'
+  }), options), null);
+
+  const denied = handleHook(pre('files-case-session', 'Write', {
+    file_path: '/workspace/example/config.toml', content: 'x'
+  }), options);
+  assert.match(denied.hookSpecificOutput.permissionDecisionReason, /S\/PATH_OUTSIDE_CONTRACT/);
+});
+
+test('files contract matches Windows paths case-insensitively without weakening POSIX matching', (t) => {
+  const options = workspace(t);
+  handleHook(prompt(
+    'files-windows-case-session',
+    '$stop-that-shit lock change files=D:/Workspace/Project/Config.toml|Src/Rules.cjs -- update config'
+  ), options);
+
+  assert.equal(handleHook({
+    ...pre('files-windows-case-session', 'Write', {
+      file_path: 'd:\\workspace\\project\\config.toml', content: 'x'
+    }),
+    cwd: 'D:\\Workspace\\Project'
+  }, options), null);
+
+  assert.equal(handleHook({
+    ...pre('files-windows-case-session', 'Write', {
+      file_path: 'src/rules.cjs', content: 'x'
+    }),
+    cwd: 'D:\\Workspace\\Project'
+  }, options), null);
+
+  const denied = handleHook({
+    ...pre('files-windows-case-session', 'Write', {
+      file_path: 'd:\\workspace\\project\\other.toml', content: 'x'
+    }),
+    cwd: 'D:\\Workspace\\Project'
+  }, options);
+  assert.match(denied.hookSpecificOutput.permissionDecisionReason, /S\/PATH_OUTSIDE_CONTRACT/);
+});
+
+test('files contract matches an absolute allowlist when the host reports cwd-relative paths', (t) => {
+  const options = workspace(t);
+  const cwd = process.platform === 'win32' ? 'D:\\Workspace\\project' : '/Workspace/project';
+  const allowed = process.platform === 'win32'
+    ? 'D:/Workspace/Config.toml'
+    : '/Workspace/Config.toml';
+  const target = process.platform === 'win32'
+    ? 'D:\\Workspace\\Config.toml'
+    : '/Workspace/Config.toml';
+
+  handleHook(prompt('files-absolute-session', `$stop-that-shit lock change files=${allowed} -- update config`), options);
+
+  assert.equal(handleHook({
+    ...pre('files-absolute-session', 'Write', { file_path: target, content: 'x' }),
+    cwd
+  }, options), null);
+});
+
+test('empty files contract blocks every write instead of becoming unbounded', (t) => {
+  const options = workspace(t);
+  handleHook(prompt('files-empty-session', '$stop-that-shit lock change files= -- update nothing'), options);
+
+  const output = handleHook(pre('files-empty-session', 'Write', {
+    file_path: 'README.md', content: 'x'
+  }), options);
+  assert.equal(output.hookSpecificOutput.permissionDecision, 'deny');
+  assert.match(output.hookSpecificOutput.permissionDecisionReason, /S\/PATH_OUTSIDE_CONTRACT/);
+});
+
+test('files contract blocks a dot-segment escape from a wildcard boundary', (t) => {
+  const options = workspace(t);
+  handleHook(prompt('files-dot-segment-session', '$stop-that-shit lock change files=src/** -- update source files'), options);
+
+  const output = handleHook(pre('files-dot-segment-session', 'Write', {
+    file_path: 'src/../README.md', content: 'x'
+  }), options);
+  assert.notEqual(output, null);
+  assert.match(output.hookSpecificOutput.permissionDecisionReason, /S\/PATH_OUTSIDE_CONTRACT/);
+});
+
+test('files contract allows equivalent paths after dot-segment normalization', (t) => {
+  const options = workspace(t);
+  handleHook(prompt('files-normalized-session', '$stop-that-shit lock change files=./src/config.cjs -- update config'), options);
+
+  assert.equal(handleHook(pre('files-normalized-session', 'Write', {
+    file_path: 'src/config.cjs', content: 'x'
+  }), options), null);
+});
+
 test('files contract requires approval when a write path is unproven', (t) => {
   const options = workspace(t);
   handleHook(prompt('files-unknown-session', '$stop-that-shit change files=src/config.cjs -- update config'), options);
   const output = handleHook(pre('files-unknown-session', 'Bash', { command: "Set-Content -Path src/config.cjs -Value 'x'" }), options);
   assert.equal(output.hookSpecificOutput.permissionDecision, 'deny');
   assert.match(output.hookSpecificOutput.permissionDecisionReason, /S\/WRITE_PATH_UNPROVEN/);
+});
+
+test('files contract requires approval when tool mutability is unproven', (t) => {
+  const options = workspace(t);
+  handleHook(prompt('files-mutability-session', '$stop-that-shit lock change files=src/** -- update source'), options);
+
+  const output = handleHook(pre('files-mutability-session', 'plugin_custom_tool', { path: 'README.md' }), options);
+  assert.equal(output.hookSpecificOutput.permissionDecision, 'deny');
+  assert.match(output.hookSpecificOutput.permissionDecisionReason, /S\/WRITE_PATH_UNPROVEN/);
+});
+
+test('files contract requires approval for a dynamic shell with unproven effects', (t) => {
+  const options = workspace(t);
+  handleHook(prompt('files-dynamic-session', '$stop-that-shit lock change files=src/** -- update source'), options);
+
+  const output = handleHook(pre('files-dynamic-session', 'Bash', { command: 'node -e "process.exit(0)"' }), options);
+  assert.equal(output.hookSpecificOutput.permissionDecision, 'deny');
+  assert.match(output.hookSpecificOutput.permissionDecisionReason, /S\/WRITE_PATH_UNPROVEN/);
+});
+
+test('unbounded files contract preserves an explicitly authorized unknown tool', (t) => {
+  const options = workspace(t);
+  handleHook(prompt('files-unbounded-session', '$stop-that-shit lock change files=** -- run the custom tool'), options);
+
+  assert.equal(handleHook(pre('files-unbounded-session', 'plugin_custom_tool', { path: 'README.md' }), options), null);
 });
 
 test('dependency installation asks before expanding the task', (t) => {

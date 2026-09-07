@@ -55,6 +55,7 @@ test('Claude Adapter maps official Hook fields to ControlEvent v1', () => {
   assert.equal(event.host.permissionMode, 'default');
   assert.equal(event.action.mutability, 'write');
   assert.deepEqual(event.action.affectedPaths, ['notebooks/demo.ipynb']);
+  assert.equal(event.action.cwd, root);
 });
 
 test('review contract blocks Claude Write', (t) => {
@@ -127,6 +128,13 @@ test('Windows absolute paths normalize relative to a Windows hook cwd', () => {
   const outside = normalizePath('D:\\other\\no.js', 'C:\\repo');
   assert.ok(outside !== 'src/ok.js');
   assert.ok(outside.includes('D:') || outside.startsWith('../'));
+});
+
+test('UNC paths normalize relative to a Windows share cwd', () => {
+  assert.equal(
+    normalizePath('//SERVER/SHARE/REPO/src/Allowed.cjs', String.raw`\\server\share\repo`),
+    'src/Allowed.cjs'
+  );
 });
 
 test('NotebookEdit participates in review and file-lock enforcement', (t) => {

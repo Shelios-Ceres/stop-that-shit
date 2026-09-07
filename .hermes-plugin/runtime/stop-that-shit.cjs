@@ -55,6 +55,7 @@ function toControlEvent(input) {
       hashIntent: detectHashIntent(input.tool_name, input.tool_input),
       dependencyIntent: detectDependencyIntent(input.tool_name, input.tool_input),
       affectedPaths: extractAffectedPaths(input.tool_name, input.tool_input, input.cwd),
+      cwd: input.cwd,
       unboundedDelegation: false
     };
   }
@@ -292,6 +293,7 @@ function handleBeforeAction(event, options) {
       reachability: event.action.reachability,
       authorization: event.action.authorization,
       affectedPaths: event.action.affectedPaths,
+      cwd: event.action.cwd,
       dependencyIntent: Boolean(event.action.dependencyIntent),
       unboundedDelegation: Boolean(event.action.unboundedDelegation)
     };
@@ -379,7 +381,7 @@ function defaultContract() {
 
 function directiveHead(prompt, matchEnd) {
   const tail = prompt.slice(matchEnd).trimStart();
-  const boundaries = [tail.indexOf('--'), tail.indexOf(':'), tail.indexOf('\n')]
+  const boundaries = [tail.indexOf('--'), tail.search(/:(?=\s|$)/), tail.indexOf('\n')]
     .filter((index) => index >= 0);
   const end = boundaries.length ? Math.min(...boundaries) : Math.min(tail.length, 80);
   return tail.slice(0, end).trim();
@@ -391,10 +393,11 @@ function parseDirective(prompt) {
   if (!mention) return null;
 
   const head = directiveHead(firstContentLine, mention.index + mention[0].length);
-  const tokens = head.split(/[\s,]+/).map((token) => token.trim().toLowerCase()).filter(Boolean);
+  const tokens = head.split(/[\s,]+/).map((token) => token.trim()).filter(Boolean);
   const parsed = { mentioned: true };
 
-  for (const token of tokens) {
+  for (const rawToken of tokens) {
+    const token = rawToken.toLowerCase();
     if (MODES.has(token)) parsed.mode = token;
     if (LEVELS.has(token)) parsed.level = token;
     const agents = /^agents=(\d+)$/.exec(token);
@@ -405,7 +408,7 @@ function parseDirective(prompt) {
     if (token === 'agents=allow') parsed.agentPolicy = 'allow';
     const hash = /^hash=(deny|ask|allow)$/.exec(token);
     if (hash && HASH_POLICIES.has(hash[1])) parsed.hashPolicy = hash[1];
-    const files = /^files=(.+)$/.exec(token);
+    const files = /^files=(.*)$/i.exec(rawToken);
     if (files) parsed.allowedPaths = files[1].split('|').map((value) => value.replace(/\\/g, '/')).filter(Boolean);
     const dependencies = /^deps=(deny|ask|allow)$/.exec(token);
     if (dependencies && SCOPE_POLICIES.has(dependencies[1])) parsed.dependencyPolicy = dependencies[1];
@@ -519,6 +522,8 @@ module.exports = {
 "src/decision.cjs": function(module, exports, __require) {
 'use strict';
 
+const nodePath = require('node:path');
+
 function decision(outcome, family, reasonCode, explanation, nextStep) {
   return { outcome, family, reasonCode, explanation, nextStep };
 }
@@ -527,11 +532,43 @@ function controlledOutcome(level, guarded = 'deny_and_explain') {
   return level === 'watch' ? 'report_and_defer' : guarded;
 }
 
-function pathAllowed(path, allowedPaths) {
-  return allowedPaths.some((allowed) => {
-    if (allowed === '**') return true;
-    if (allowed.endsWith('/**')) return path === allowed.slice(0, -3) || path.startsWith(allowed.slice(0, -2));
-    return path === allowed;
+function isWindowsAbsolute(value) {
+  const text = String(value || '');
+  return /^[A-Za-z]:[\\/]|^\\\\/.test(text)
+    || (process.platform === 'win32' && /^\/\//.test(text));
+}
+
+function isAbsolutePath(value) {
+  return /^[A-Za-z]:[\\/]|^\\\\|^\/\//.test(String(value || ''))
+    || nodePath.posix.isAbsolute(String(value || '').replace(/\\/g, '/'));
+}
+
+function normalizeComparablePath(value, cwd) {
+  let normalized = String(value || '').trim().replace(/\\/g, '/');
+  if (!normalized) return '';
+  const base = String(cwd || '').trim();
+  const windowsStyle = isWindowsAbsolute(normalized) || isWindowsAbsolute(base);
+  if (base && windowsStyle && isAbsolutePath(normalized) && isAbsolutePath(base)) {
+    normalized = nodePath.win32.relative(base, normalized).replace(/\\/g, '/');
+  } else if (base && nodePath.posix.isAbsolute(normalized) && nodePath.posix.isAbsolute(base.replace(/\\/g, '/'))) {
+    normalized = nodePath.posix.relative(base.replace(/\\/g, '/'), normalized);
+  }
+  return nodePath.posix.normalize(normalized).replace(/^\.\//, '');
+}
+
+function pathAllowed(path, allowedPaths, cwd) {
+  const normalizedPath = normalizeComparablePath(path, cwd);
+  return allowedPaths.some((value) => {
+    const allowed = normalizeComparablePath(value, cwd);
+    const caseInsensitive = isWindowsAbsolute(cwd) || (isWindowsAbsolute(path) && isWindowsAbsolute(value));
+    const comparablePath = caseInsensitive ? normalizedPath.toLowerCase() : normalizedPath;
+    const comparableAllowed = caseInsensitive ? allowed.toLowerCase() : allowed;
+    if (comparableAllowed === '**') return true;
+    if (comparableAllowed.endsWith('/**')) {
+      const base = comparableAllowed.slice(0, -3);
+      return comparablePath === base || comparablePath.startsWith(`${base}/`);
+    }
+    return comparablePath === comparableAllowed;
   });
 }
 
@@ -585,17 +622,18 @@ function decide({ contract, action, state = {} }) {
     );
   }
 
-  if (Array.isArray(contract.allowedPaths) && Array.isArray(action.affectedPaths)) {
-    if (action.mutability === 'write' && action.affectedPaths.length === 0 && !contract.allowedPaths.includes('**')) {
+  if (Array.isArray(contract.allowedPaths)) {
+    const affectedPaths = Array.isArray(action.affectedPaths) ? action.affectedPaths : [];
+    if (['write', 'unknown'].includes(action.mutability) && affectedPaths.length === 0 && !contract.allowedPaths.includes('**')) {
       return decision(
         controlledOutcome(level, 'require_user_approval'),
         'S',
         'WRITE_PATH_UNPROVEN',
-        'The action writes through a tool whose target path is not proven inside the declared file boundary.',
+        'The action may write through a tool whose target path is not proven inside the declared file boundary.',
         'Use apply_patch or an Edit tool with visible paths, or obtain approval for an explicit broader boundary.'
       );
     }
-    const outside = action.affectedPaths.filter((path) => !pathAllowed(path, contract.allowedPaths));
+    const outside = affectedPaths.filter((path) => !pathAllowed(path, contract.allowedPaths, action.cwd));
     if (outside.length) {
       return decision(
         controlledOutcome(level),
@@ -796,42 +834,72 @@ module.exports = { readRuntime, recordDecision };
 "package.json": function(module, exports, __require) {
 module.exports = {
   "name": "stop-that-shit",
-  "version": "0.1.0-shelios.3",
+  "version": "0.2.1-shelios.1",
   "private": true,
-  "description": "Stop unneeded scope, subagents, dependencies, and hashes in Codex, Claude Code, OpenCode, and Hermes Agent CLI tasks",
+  "description": "Keep agent work bounded and reduce defensive wording in Codex, Claude Code, OpenCode, Hermes Agent CLI, and Pi",
+  "keywords": [
+    "pi-package"
+  ],
   "license": "MIT",
   "main": "./opencode/stop-that-shit.mjs",
+  "bin": {
+    "sts": "./scripts/sts.cjs"
+  },
   "exports": {
     ".": "./opencode/stop-that-shit.mjs",
     "./server": "./opencode/stop-that-shit.mjs"
   },
   "files": [
     "opencode/",
+    "pi/",
     "src/",
     "hooks/",
     ".hermes-plugin/",
     "skills/",
+    "scripts/sts.cjs",
+    "scripts/case-bundle-lib.cjs",
+    "scripts/generated/case-bundle-v1-validator.cjs",
     "INSTALL.md",
     "LICENSE",
     "PRIVACY.md",
     "README.md"
   ],
+  "pi": {
+    "extensions": [
+      "./pi/stop-that-shit.ts"
+    ],
+    "skills": [
+      "./skills/stop-that-shit",
+      "./skills/stss"
+    ]
+  },
   "scripts": {
     "schema:build": "node scripts/build-case-bundle-validator.cjs",
     "schema:check": "node scripts/build-case-bundle-validator.cjs --check",
     "pretest": "npm run schema:check",
     "hermes:build": "node scripts/build-hermes-plugin.cjs",
     "hermes:check": "node scripts/build-hermes-plugin.cjs --check",
-    "test": "node --test test/case-bundle.test.cjs test/claude-adapter.test.cjs test/claude-plugin.test.cjs test/contracts.test.cjs test/control-protocol.test.cjs test/decision.test.cjs test/hermes-adapter.test.cjs test/hermes-hook.test.cjs test/hermes-plugin-package.test.cjs test/hooks.test.cjs test/opencode-adapter.test.cjs test/opencode-plugin.test.cjs test/opencode-smoke.test.cjs test/paired-eval.test.cjs test/plugin.test.cjs test/runtime-audit.test.cjs test/sts-cli.test.cjs",
+    "test": "node --test test/case-bundle.test.cjs test/claude-adapter.test.cjs test/claude-plugin.test.cjs test/contracts.test.cjs test/control-protocol.test.cjs test/decision.test.cjs test/hermes-adapter.test.cjs test/hermes-hook.test.cjs test/hermes-plugin-package.test.cjs test/hooks.test.cjs test/opencode-adapter.test.cjs test/opencode-plugin.test.cjs test/opencode-smoke.test.cjs test/paired-eval.test.cjs test/pi-adapter.test.cjs test/pi-extension.test.cjs test/pi-package.test.cjs test/plugin.test.cjs test/runtime-audit.test.cjs test/sts-cli.test.cjs test/stss-skill.test.cjs",
     "sts": "node scripts/sts.cjs",
     "eval": "node scripts/evaluate-cases.cjs",
+    "eval:selftest": "node --test test/case-bundle.test.cjs test/paired-eval.test.cjs",
     "eval:paired": "node scripts/run-paired-eval.cjs",
+    "eval:routing": "node scripts/run-paired-eval.cjs --routing --runs 1",
+    "eval:host-smoke": "node scripts/run-paired-eval.cjs --host-smoke --runs 1",
     "release:check": "npm run schema:check && node scripts/release-check.cjs",
     "release:build": "node scripts/build-release.cjs"
   },
   "engines": {
     "node": ">=18",
     "opencode": ">=1.18.18"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "ajv": "^8.20.0"
@@ -1102,7 +1170,9 @@ function classifyHermesTool(toolName, toolInput) {
 }
 
 function isWindowsAbsolute(value) {
-  return /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value);
+  const text = String(value || '');
+  return /^[A-Za-z]:[\\/]/.test(text) || /^\\\\[^\\]+\\[^\\]+/.test(text)
+    || (process.platform === 'win32' && /^\/\/[^/]+\/[^/]+/.test(text));
 }
 
 function normalizePath(value, cwd) {
@@ -1110,7 +1180,8 @@ function normalizePath(value, cwd) {
   if (!raw) return '';
 
   const base = String(cwd || '');
-  if (isWindowsAbsolute(raw)) {
+  const windowsStyle = isWindowsAbsolute(raw) || isWindowsAbsolute(base);
+  if (windowsStyle && (isWindowsAbsolute(raw) || /^\/\//.test(raw))) {
     const relative = isWindowsAbsolute(base) ? nodePath.win32.relative(base, raw) : raw;
     return relative.replace(/\\/g, '/').replace(/^\.\//, '');
   }
@@ -1292,9 +1363,17 @@ function detectHashIntent(toolName, toolInput) {
 }
 
 function normalizePath(value, cwd) {
-  let normalized = String(value || '').trim().replace(/^['"]|['"]$/g, '').replace(/\\/g, '/');
-  if (cwd && nodePath.isAbsolute(normalized)) {
-    normalized = nodePath.relative(String(cwd), normalized).replace(/\\/g, '/');
+  const raw = String(value || '').trim().replace(/^['"]|['"]$/g, '');
+  if (!raw) return '';
+  const windowsStyle = /^[A-Za-z]:[\\/]|^\\\\/.test(raw)
+    || /^[A-Za-z]:[\\/]|^\\\\/.test(String(cwd || ''))
+    || (process.platform === 'win32' && (/^\/\//.test(raw) || /^\/\//.test(String(cwd || ''))));
+  let normalized = raw.replace(/\\/g, '/');
+  if (cwd && windowsStyle && (nodePath.win32.isAbsolute(raw) || /^\/\//.test(raw))
+    && (nodePath.win32.isAbsolute(String(cwd)) || /^\/\//.test(String(cwd)))) {
+    normalized = nodePath.win32.relative(String(cwd), raw).replace(/\\/g, '/');
+  } else if (cwd && nodePath.posix.isAbsolute(normalized)) {
+    normalized = nodePath.posix.relative(String(cwd), normalized).replace(/\\/g, '/');
   }
   return normalized.replace(/^\.\//, '');
 }
@@ -1385,42 +1464,72 @@ module.exports = { classifyCodexTool, classifyShell, detectDependencyIntent, det
 };
 __modules["package.json"] = function(module) { module.exports = {
   "name": "stop-that-shit",
-  "version": "0.1.0-shelios.3",
+  "version": "0.2.1-shelios.1",
   "private": true,
-  "description": "Stop unneeded scope, subagents, dependencies, and hashes in Codex, Claude Code, OpenCode, and Hermes Agent CLI tasks",
+  "description": "Keep agent work bounded and reduce defensive wording in Codex, Claude Code, OpenCode, Hermes Agent CLI, and Pi",
+  "keywords": [
+    "pi-package"
+  ],
   "license": "MIT",
   "main": "./opencode/stop-that-shit.mjs",
+  "bin": {
+    "sts": "./scripts/sts.cjs"
+  },
   "exports": {
     ".": "./opencode/stop-that-shit.mjs",
     "./server": "./opencode/stop-that-shit.mjs"
   },
   "files": [
     "opencode/",
+    "pi/",
     "src/",
     "hooks/",
     ".hermes-plugin/",
     "skills/",
+    "scripts/sts.cjs",
+    "scripts/case-bundle-lib.cjs",
+    "scripts/generated/case-bundle-v1-validator.cjs",
     "INSTALL.md",
     "LICENSE",
     "PRIVACY.md",
     "README.md"
   ],
+  "pi": {
+    "extensions": [
+      "./pi/stop-that-shit.ts"
+    ],
+    "skills": [
+      "./skills/stop-that-shit",
+      "./skills/stss"
+    ]
+  },
   "scripts": {
     "schema:build": "node scripts/build-case-bundle-validator.cjs",
     "schema:check": "node scripts/build-case-bundle-validator.cjs --check",
     "pretest": "npm run schema:check",
     "hermes:build": "node scripts/build-hermes-plugin.cjs",
     "hermes:check": "node scripts/build-hermes-plugin.cjs --check",
-    "test": "node --test test/case-bundle.test.cjs test/claude-adapter.test.cjs test/claude-plugin.test.cjs test/contracts.test.cjs test/control-protocol.test.cjs test/decision.test.cjs test/hermes-adapter.test.cjs test/hermes-hook.test.cjs test/hermes-plugin-package.test.cjs test/hooks.test.cjs test/opencode-adapter.test.cjs test/opencode-plugin.test.cjs test/opencode-smoke.test.cjs test/paired-eval.test.cjs test/plugin.test.cjs test/runtime-audit.test.cjs test/sts-cli.test.cjs",
+    "test": "node --test test/case-bundle.test.cjs test/claude-adapter.test.cjs test/claude-plugin.test.cjs test/contracts.test.cjs test/control-protocol.test.cjs test/decision.test.cjs test/hermes-adapter.test.cjs test/hermes-hook.test.cjs test/hermes-plugin-package.test.cjs test/hooks.test.cjs test/opencode-adapter.test.cjs test/opencode-plugin.test.cjs test/opencode-smoke.test.cjs test/paired-eval.test.cjs test/pi-adapter.test.cjs test/pi-extension.test.cjs test/pi-package.test.cjs test/plugin.test.cjs test/runtime-audit.test.cjs test/sts-cli.test.cjs test/stss-skill.test.cjs",
     "sts": "node scripts/sts.cjs",
     "eval": "node scripts/evaluate-cases.cjs",
+    "eval:selftest": "node --test test/case-bundle.test.cjs test/paired-eval.test.cjs",
     "eval:paired": "node scripts/run-paired-eval.cjs",
+    "eval:routing": "node scripts/run-paired-eval.cjs --routing --runs 1",
+    "eval:host-smoke": "node scripts/run-paired-eval.cjs --host-smoke --runs 1",
     "release:check": "npm run schema:check && node scripts/release-check.cjs",
     "release:build": "node scripts/build-release.cjs"
   },
   "engines": {
     "node": ">=18",
     "opencode": ">=1.18.18"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "ajv": "^8.20.0"

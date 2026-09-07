@@ -49,6 +49,7 @@ test('OpenCode Adapter maps native tool fields to ControlEvent v1', () => {
   assert.equal(event.host.family, 'opencode');
   assert.equal(event.action.mutability, 'write');
   assert.deepEqual(event.action.affectedPaths, ['src/config.cjs']);
+  assert.equal(event.action.cwd, '/repo');
 });
 
 test('OpenCode prompt extraction ignores synthetic host messages', () => {
@@ -89,6 +90,38 @@ test('OpenCode patch paths and Windows paths normalize without host guessing', (
     patchText: '*** Begin Patch\n*** Update File: src/a.cjs\n*** Move to: src/b.cjs\n*** End Patch'
   }, '/repo'), ['src/a.cjs', 'src/b.cjs']);
   assert.equal(normalizePath('C:\\repo\\src\\a.cjs', 'C:\\repo'), 'src/a.cjs');
+});
+
+test('OpenCode UNC paths normalize with Windows semantics and preserve target casing', () => {
+  assert.equal(
+    normalizePath('//SERVER/SHARE/REPO/src/Allowed.cjs', String.raw`\\server\share\repo`),
+    'src/Allowed.cjs'
+  );
+  assert.equal(
+    normalizePath(String.raw`\\SERVER\SHARE\REPO\src\Allowed.cjs`, String.raw`\\server\share\repo`),
+    'src/Allowed.cjs'
+  );
+});
+
+test('OpenCode UNC file boundary is case-insensitive on a simulated Windows share', (t) => {
+  const options = workspace(t);
+  handleOpenCodeMessage(...message(
+    'unc-session',
+    '$stop-that-shit lock change files=//server/share/repo/src/allowed.cjs -- update source'
+  ), { directory: '//server/share/repo' }, options);
+  const result = handleOpenCodeTool(...tool('unc-session', 'edit', {
+    filePath: '//SERVER/SHARE/REPO/src/Allowed.cjs', oldString: '1', newString: '2'
+  }), { directory: '//server/share/repo' }, options);
+  if (process.platform === 'win32') {
+    assert.equal(result.kind, 'none');
+  } else {
+    assert.match(result.message, /S\/PATH_OUTSIDE_CONTRACT/);
+  }
+
+  const escaped = handleOpenCodeTool(...tool('unc-session', 'edit', {
+    filePath: '//SERVER/SHARE/REPO/src/../README.md', oldString: '1', newString: '2'
+  }), { directory: '//server/share/repo' }, options);
+  assert.match(escaped.message, /S\/PATH_OUTSIDE_CONTRACT/);
 });
 
 test('OpenCode detects dependency and hash intent in native fields', () => {

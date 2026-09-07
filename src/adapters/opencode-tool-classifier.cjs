@@ -18,10 +18,13 @@ function normalizePath(value, cwd) {
   const original = String(value || '').trim().replace(/^['"]|['"]$/g, '');
   if (!original) return '';
 
-  const windowsPath = /^[A-Za-z]:[\\/]|^\\\\/.test(original);
-  const windowsCwd = /^[A-Za-z]:[\\/]|^\\\\/.test(String(cwd || ''));
+  const windowsPath = /^[A-Za-z]:[\\/]|^\\\\/.test(original)
+    || (process.platform === 'win32' && /^\/\//.test(original));
+  const windowsCwd = /^[A-Za-z]:[\\/]|^\\\\/.test(String(cwd || ''))
+    || (process.platform === 'win32' && /^\/\//.test(String(cwd || '')));
+  const windowsSharePath = /^\/\//.test(original) && windowsCwd;
   let normalized = original;
-  if (cwd && windowsPath && windowsCwd) {
+  if (cwd && (windowsPath || windowsSharePath) && windowsCwd) {
     normalized = path.win32.relative(String(cwd), original);
   } else if (cwd && path.posix.isAbsolute(original) && path.posix.isAbsolute(String(cwd))) {
     normalized = path.posix.relative(String(cwd), original);

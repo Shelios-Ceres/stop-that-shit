@@ -45,7 +45,9 @@ function classifyHermesTool(toolName, toolInput) {
 }
 
 function isWindowsAbsolute(value) {
-  return /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value);
+  const text = String(value || '');
+  return /^[A-Za-z]:[\\/]/.test(text) || /^\\\\[^\\]+\\[^\\]+/.test(text)
+    || (process.platform === 'win32' && /^\/\/[^/]+\/[^/]+/.test(text));
 }
 
 function normalizePath(value, cwd) {
@@ -53,7 +55,8 @@ function normalizePath(value, cwd) {
   if (!raw) return '';
 
   const base = String(cwd || '');
-  if (isWindowsAbsolute(raw)) {
+  const windowsStyle = isWindowsAbsolute(raw) || isWindowsAbsolute(base);
+  if (windowsStyle && (isWindowsAbsolute(raw) || /^\/\//.test(raw))) {
     const relative = isWindowsAbsolute(base) ? nodePath.win32.relative(base, raw) : raw;
     return relative.replace(/\\/g, '/').replace(/^\.\//, '');
   }

@@ -51,7 +51,7 @@ general improvement in model behavior.
 3. Run these commands one at a time:
 
    ```powershell
-   codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.1.0-shelios.3
+   codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.1
    codex plugin add stop-that-shit@shelios-plugins
    ```
 
@@ -91,6 +91,24 @@ These steps are not required every time the plugin is used. Restart the
 corresponding Hermes process only after enabling, disabling, updating, rolling
 back, or reinstalling the plugin.
 
+## Pi Coding Agent
+
+Use Pi `0.84.4` or re-run the pinned compatibility checks before claiming a
+newer version. Pi itself requires Node.js `22.19.0` or newer. Review the package
+source with the user because Pi packages execute with full system access.
+
+For a local checkout containing the adapter:
+
+```bash
+pi install /absolute/path/to/stop-that-shit
+```
+
+Use `-l` only when the user wants project-scoped settings. Start a new Pi
+process, or run `/reload` after package-resource changes. Verify that both the
+Extension and `stop-that-shit` Skill are listed, then invoke
+`/skill:stop-that-shit review -- ...` or the host-neutral directive. Do not
+claim that the optional `subagent` child processes inherit the root contract.
+
 ## Smoke test
 
 Use a disposable repository. Do not run the write test in the user's active
@@ -117,7 +135,13 @@ general improvement in model behavior.
 If the user does not want Hooks, install the advisory Skill instead:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.1.0-shelios.3/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.1-shelios.1/skills/stop-that-shit
+```
+
+If the user asks for only Stop That Shit Slop, run this from a `0.2.1-shelios.1` checkout:
+
+```bash
+npx skills add ./skills/stss --global
 ```
 
 Ask the user to start a new Codex task after installation. Explain that this

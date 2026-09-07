@@ -21,7 +21,7 @@ function defaultContract() {
 
 function directiveHead(prompt, matchEnd) {
   const tail = prompt.slice(matchEnd).trimStart();
-  const boundaries = [tail.indexOf('--'), tail.indexOf(':'), tail.indexOf('\n')]
+  const boundaries = [tail.indexOf('--'), tail.search(/:(?=\s|$)/), tail.indexOf('\n')]
     .filter((index) => index >= 0);
   const end = boundaries.length ? Math.min(...boundaries) : Math.min(tail.length, 80);
   return tail.slice(0, end).trim();
@@ -33,10 +33,11 @@ function parseDirective(prompt) {
   if (!mention) return null;
 
   const head = directiveHead(firstContentLine, mention.index + mention[0].length);
-  const tokens = head.split(/[\s,]+/).map((token) => token.trim().toLowerCase()).filter(Boolean);
+  const tokens = head.split(/[\s,]+/).map((token) => token.trim()).filter(Boolean);
   const parsed = { mentioned: true };
 
-  for (const token of tokens) {
+  for (const rawToken of tokens) {
+    const token = rawToken.toLowerCase();
     if (MODES.has(token)) parsed.mode = token;
     if (LEVELS.has(token)) parsed.level = token;
     const agents = /^agents=(\d+)$/.exec(token);
@@ -47,7 +48,7 @@ function parseDirective(prompt) {
     if (token === 'agents=allow') parsed.agentPolicy = 'allow';
     const hash = /^hash=(deny|ask|allow)$/.exec(token);
     if (hash && HASH_POLICIES.has(hash[1])) parsed.hashPolicy = hash[1];
-    const files = /^files=(.+)$/.exec(token);
+    const files = /^files=(.*)$/i.exec(rawToken);
     if (files) parsed.allowedPaths = files[1].split('|').map((value) => value.replace(/\\/g, '/')).filter(Boolean);
     const dependencies = /^deps=(deny|ask|allow)$/.exec(token);
     if (dependencies && SCOPE_POLICIES.has(dependencies[1])) parsed.dependencyPolicy = dependencies[1];

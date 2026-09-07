@@ -11,46 +11,82 @@ actions, context responses, and permission denies. It records host effect as
 `unobserved`; a returned permission deny is not evidence that the host skipped
 the action.
 
-Version: 0.1.0-shelios.3 Distinct Codex Marketplace Release
-Release: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.3
-Upstream baseline: https://github.com/lennney/stop-that-shit/releases/tag/0.1.0
-Last updated: 2026-09-01
+Version: 0.2.1-shelios.1 Upstream integration with preserved fork behavior
+Release: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.1
+Upstream baseline: https://github.com/lennney/stop-that-shit/releases/tag/0.2.1
+Previous fork: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.3
+Last updated: 2026-09-07
+
+## Fork integration validation
+
+- 268 runtime/unit/integration tests pass; one optional installed OpenCode
+  smoke is skipped. The 18 executable policy case arms pass.
+- The release allowlist covers 188 files; the generated Hermes runtime and
+  CaseBundle validator are checked against their sources.
+- A separate Codex profile installs the built package. Host `skills/list`
+  discovers both `stop-that-shit` and `stss`, and `hooks/list` resolves the
+  two unchanged Hook definitions from the versioned `shelios-plugins` cache.
+- Regression coverage preserves `agents=allow`, directive placement,
+  manifest-based eval paths, and default runtime data resolution. Windows UNC
+  paths use case-insensitive matching across the supported adapters.
+- The bundled Python validators require unavailable PyYAML. Actual Codex
+  installation and host discovery were used to validate package loading;
+  this does not claim a pass from those Python validators.
+
+## Upstream validation record
+
+The following results were published by upstream for 0.2.1 and earlier
+releases. They are historical evidence, not new live-host runs of this fork.
 
 This tree is validated with deterministic Hook-schema simulations, real
 child-process stdin/stdout entrypoint tests, cross-platform path regression
 tests, and shared policy tests:
 
-- 194 tests pass across the runtime, unit, and integration suites, including the
-  preserved Codex tests, Claude child-process Hook simulations, OpenCode
-  adapter/plugin regressions, and Hermes native-plugin/runtime tests; one
-  optional installed OpenCode smoke is skipped when OpenCode 1.18.18 or newer
-  is unavailable;
+- 246/246 executed runtime/unit/integration tests pass, including the preserved
+  Codex tests, Claude child-process Hook simulations, OpenCode adapter/plugin
+  regressions, Hermes native-plugin/runtime tests, and Pi adapter/package tests;
+  one optional installed
+  OpenCode smoke is skipped when OpenCode 1.18.18 or newer is unavailable;
 - 18/18 executable Bad/Good policy case arms pass;
 - Claude review-mode denial, namespaced slash-command arming, POSIX/Windows path
-  normalization, `NotebookEdit`, `PowerShell`, `Monitor`, `EnterWorktree`, and
-  `Workflow` fan-out handling have dedicated regressions;
+  normalization and Windows case matching, `NotebookEdit`, `PowerShell`, `Monitor`,
+  `EnterWorktree`, and `Workflow` fan-out handling have dedicated regressions;
 - two independent Claude Hook processes cannot oversubscribe `agents=1`;
 - all checked-in `.cjs` files pass `node --check`, all JSON files parse, and the
-  release allowlist passes with 135 files;
-- Codex Marketplace metadata, plugin metadata, installation selectors, and
-  paired-eval cache discovery resolve the distinct `shelios-plugins` and
-  `stop-that-shit` identities from checked-in manifests;
-- the built release package installs into an isolated Codex home as
-  `stop-that-shit@shelios-plugins`, with its cache at
-  `plugins/cache/shelios-plugins/stop-that-shit/0.1.0-shelios.3`;
-- the generated CaseBundle validator and its schema were not changed;
+  release allowlist passes with 188 files;
+- the generated CaseBundle validator matches the checked-in schema, including
+  the event-count acceptance used by the new evaluation cases;
 - on a local Windows host, `claude plugin validate` reported no warnings and a
   live smoke session armed the Guard through both the `$stop-that-shit`
   directive and the namespaced slash form, with a covered write denied.
+
+## Pi adapter validation
+
+On 2026-08-31, the Pi adapter was checked against
+`@earendil-works/pi-coding-agent` `0.84.4` on Node.js `24.14.1`:
+
+- Pi's real TypeScript extension loader loaded `pi/stop-that-shit.ts` without
+  diagnostics and registered `input`, `before_agent_start`, `tool_call`, and
+  `tool_result`;
+- an isolated `pi install` of the local package discovered both the Extension
+  and the existing `stop-that-shit` Skill;
+- 18 Pi-specific tests cover review/change decisions, POSIX and Windows paths,
+  dependency/hash intent, unknown tools, native Skill arming, mid-turn contract
+  switches, watch context, fail-open adapter errors, and atomic parent-level
+  `subagent` budgeting.
+
+This proves the package and adapter response path for the pinned Pi version. It
+does not prove child-process contract inheritance or bypass resistance outside
+Pi's standard Agent `tool_call` dispatcher.
 
 ## Published technical preview
 
 Verified locally:
 
 - plugin and Skill validators pass;
-- 92/92 automated unit, integration, privacy, CaseBundle, CLI, and rescore tests
+- 232/232 executed unit, integration, privacy, CaseBundle, CLI, and rescore tests
   pass locally;
-- 14/14 executable Bad/Good case arms pass;
+- 18/18 executable Bad/Good case arms pass;
 - packaged Hook input/output works on Windows;
 - review blocks covered writes and explicit change preserves the Good Case;
 - optional file locks handle repository-relative and absolute patch paths;
@@ -64,13 +100,17 @@ Verified locally:
   profile. The TUI reported one installed and active handler for
   `UserPromptSubmit` and `PreToolUse`, with zero handlers for every other event.
 - the public paired-eval harness produces a fixed baseline/instruction/plugin
-  plan over four Bad/Good families. The default command is dry-run only.
+  plan over eight Bad/Good families. The default command is dry-run only;
+  routing and host-integration-smoke plans are separate commands and evidence
+  paths;
+- routing scorer regressions cover escaped Windows separators and Codex commands
+  that batch later output after the Skill body;
 - every observing or armed before-action check produces a metadata-only local
   RuntimeEvent when storage is writable; damaged tail records are ignored and
   audit write failures do not alter Guard decisions;
 - `status`, `runtime`, `explain`, and append-only human labels expose that local
   evidence without changing the active task contract;
-- the four public families are validated `CaseBundle v1` directories, and
+- the eight public families are validated `CaseBundle v1` directories, and
   archived results can be rescored without another model call.
 - the 0.0.3 release candidate passed 92/92 automated tests, 14/14 executable
   policy case arms, the 101-file release allowlist, and an installed-cache Hook
@@ -185,16 +225,23 @@ were run after the null result.
 
 ## Not yet verified
 
-The following are explicit limitations, not 0.1.0-shelios.3 release blockers. The project
-does not require a large benchmark to make a probabilistic mitigation claim.
+The following remain unverified. A dry-run plan is not a live result.
 
 - a multi-scenario live baseline/plugin matrix for the reduced candidate;
+- a complete live implicit-routing matrix (22 cells for one run) and the
+  three-cell host integration smoke; the interrupted partial routing run is
+  diagnostic only and is not a release result;
 - interactive `/hooks` trust on a separate physical machine;
 - live macOS and Linux Hook behavior beyond the automated CI matrix;
 - several distinct community scenarios and multiple seeds;
 - specialized tool paths that may bypass normal Hook coverage.
 
-The upgraded paired-eval harness is available, but its 90-session default matrix
+One interrupted pre-redesign routing archive contains four completed cells and
+18 unrun cells. Offline rescore after the Windows path and batched-output scorer
+fixes reports 4/4 Skill loads and 4/4 behavior passes for the completed cells.
+That partial archive does not validate the revised routing corpus.
+
+The upgraded paired-eval harness is available, but its 144-session default matrix
 has not been run or published. A generated plan, RuntimeEvent count, or
 permission-deny response is not effectiveness evidence. Host effect remains
 `unobserved` until the task-level acceptance result is evaluated.
@@ -244,11 +291,14 @@ leading synthetic fixtures.
 Do not claim that Stop That Shit solves overengineering across coding agents or
 publish an improvement percentage from unit tests or this single scenario.
 
-The defensible 0.1.0-shelios.3 claim is:
+The defensible 0.2.1-shelios.1 claim is:
 
-> In Codex, Claude Code, OpenCode, and Hermes Agent CLI, Stop That Shit provides
+> In Codex, Claude Code, OpenCode, Hermes Agent CLI, and Pi, Stop That Shit provides
 > a short on-demand decision ladder and enforces a few explicit task-authority
-> rules on covered host action paths. Hermes 0.1.0-shelios.3 coverage is limited to the
+> rules on covered host action paths. Stop That Shit Slop adds an optional,
+> standalone Skill for reducing defensive wording when a sentence has no decision
+> consumer, with twelve fixed offline responses used for regression acceptance.
+> Hermes 0.2.1 coverage is limited to the
 > native Plugin callbacks `pre_llm_call` and `pre_tool_call`; Gateway support
 > refers to the restart lifecycle after plugin changes, not coverage of every
 > Hermes surface. It may reduce some forms of execution drift, but it does not

@@ -1,10 +1,19 @@
 # Privacy
 
-Stop That Shit is local-only. It has no telemetry, cloud service, transcript
-upload, or analytics endpoint.
+Stop That Shit makes no automatic network requests. It has no telemetry, cloud
+service, transcript upload, or analytics endpoint. The Guard and both Skills
+run locally.
 
-The plugin stores contract state and append-only runtime evidence in the
-host-owned plugin data directory. Runtime events are metadata-only: event time,
+The optional `sts doctor --check-update` command sends one unauthenticated HTTPS
+request to the public GitHub Releases API for `Shelios-Ceres/stop-that-shit`
+only when the user invokes it. The
+request identifies this public repository and sends no prompt, transcript,
+runtime event, project path, code, or local configuration. The command returns
+the installed version, latest release tag, and GitHub release URL; it does not
+download or install an update.
+
+The plugin stores contract state and append-only runtime evidence in a
+host-owned data or configuration directory. Runtime events are metadata-only: event time,
 a derived session key, plugin/control revision, tool name, mutability, path
 count, boolean hash/dependency intent, bounded contract fields, the Guard
 decision, and the response returned to the host.

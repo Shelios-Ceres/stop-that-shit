@@ -4,6 +4,123 @@
 
 No unreleased changes yet.
 
+## 0.2.1-shelios.1 — 2026-09-07 (Upstream integration / 上游合入)
+
+- 完整合入上游 0.2.1，包括受限 `files=` 修复、Pi Adapter、STSS Skill、
+  扩充的评测与显式更新查询。 / Integrates upstream 0.2.1, including scoped
+  file fixes, Pi, STSS, expanded evaluation tools, and explicit update checks.
+- 保留 `agents=allow`、首非空行指令边界、`shelios-plugins` Marketplace 和
+  清单驱动的缓存定位。 / Preserves the fork's delegation policy, first-line
+  directive boundary, Marketplace identity, and manifest-based cache lookup.
+- 更新检查跟随本 Fork；`sts doctor` 默认读取当前 Marketplace 的运行数据。
+  / Update checks follow this fork and doctor reads the current Marketplace's
+  runtime data by default.
+- 修复上游遗漏的 Windows UNC 正斜杠路径大小写误拒绝，并同步各宿主路径
+  归一化。 / Fixes Windows UNC casing false-denials across host normalizers.
+- 268 项测试通过，1 项可选 smoke 跳过；18/18 策略案例和 188 文件发布检查
+  通过。 / 268 tests pass, one optional smoke is skipped, and 18/18 policy arms
+  and the 188-file release check pass.
+
+## 0.2.1 — 2026-09-03 (Scoped Guard false-allow fixes / 受限 Guard 误放行修复)
+
+### 修复 / Fixed
+
+- **Scoped file locks — #31**：`files=` 现在保留路径原始大小写，并在比较时统一
+  绝对 allowlist 与宿主基于 `cwd` 报告的相对路径；Windows 盘符也不再被误当成
+  指令分隔符。/ `files=` now preserves path casing, compares absolute
+  allowlists with host paths normalized relative to `cwd`, and accepts Windows
+  drive letters without treating their colon as a directive delimiter.
+- **Scoped file locks — #33**：窄 `files=` 边界现在会要求批准无法证明只读性和目标路径的
+  未知工具，而不是把它们当作 `WITHIN_CONTRACT` 放行；显式 `files=**` 仍保留
+  change 模式下的宽边界。/ Narrow `files=` scopes now require approval for
+  unknown tools whose mutability and target paths are unproven instead of
+  allowing them as `WITHIN_CONTRACT`; explicit `files=**` remains unbounded.
+
+- **Scoped file locks — #34**：显式空值 `files=` 现在表示不允许写入任何文件，不再静默
+  退化成无边界 change；省略 `files` 仍保持原有行为。/ An explicit empty
+  `files=` value now allows no file writes instead of silently degrading to an
+  unbounded change contract; omitting `files` preserves the existing behavior.
+- **Scoped file locks — #35**：在比较 `files=` 边界前规范化 `.`、`..` 和重复路径
+  分隔符，阻止写入通过 dot segment 逃出声明的 wildcard 范围，同时保留范围内
+  的等价路径。/ Normalizes dot segments and repeated separators before
+  comparing `files=` boundaries, preventing writes from escaping a declared
+  wildcard scope while preserving equivalent in-scope paths.
+- **Windows path matching — #36**：Windows 风格的 `files=` 边界现在按平台语义忽略
+  路径大小写，同时保留 POSIX 路径的大小写敏感比较。/ Windows-style
+  `files=` boundaries now compare path casing using Windows semantics while
+  POSIX paths remain case-sensitive.
+
+## 0.2.0 — 2026-09-01 (Stop That Shit Slop / 别再废话)
+
+> **从多做一步，到多说一句。** Stop That Shit Slop 把任务边界判断带到提案和
+> 决策文字：判断一句话该删、该收紧、该移动，还是留下。
+>
+> **From one extra action to one extra sentence.** Stop That Shit Slop applies
+> task-boundary judgment to proposals and decision-facing writing: drop,
+> calibrate, relocate, or keep each sentence.
+
+### 新增 / New
+
+- **独立 STSS Skill**：增加 `rewrite` 与 `audit` 两种模式，处理没有决策
+  消费者的免责声明、多层 hedging、自我辩护、负向范围和空洞提案话术。
+  / Adds a standalone STSS Skill with `rewrite` and `audit` modes for
+  disclaimers without a decision consumer, hedge stacks, self-defense,
+  negative scope, and hollow proposal language.
+- **Claim-preserving method**：使用 Claim Ledger、Sentence Consumer Test 和
+  Claim Diff，核对原文中的事实、数字、责任主体、证据强度和因果关系。
+  / Uses a Claim Ledger, Sentence Consumer Test, and Claim Diff to check the
+  supplied facts, numbers, actors, evidence strength, and causal relationships.
+- **离线验收**：增加六组 Good/Bad CaseBundle、十二个合成 fixture 和对应的
+  固定离线响应回归。/ Adds six Good/Bad CaseBundle families, twelve synthetic
+  fixtures, and matching fixed offline-response regressions.
+- **分发与文档**：完整插件可发现两个 Skill；Pi package 注册 STSS；同一源码
+  目录也支持单独安装 STSS。中英文 README 改为“别再造史，也别再废话”的
+  双 Skill 结构。/ Makes both Skills discoverable from the full plugin,
+  registers STSS in the Pi package, and supports standalone STSS installation
+  from the same source directory. The Chinese and English READMEs now present
+  the two-Skill product.
+- **显式更新检查**：`sts doctor --check-update` 在用户调用时查询 GitHub
+  Release，返回 `installed`、`latest` 和 `releaseUrl`；STSS 的单独安装继续由
+  宿主或 Skill Installer 更新。/ `sts doctor --check-update` queries GitHub
+  Releases when invoked and returns `installed`, `latest`, and `releaseUrl`;
+  the host or Skill Installer manages standalone STSS updates.
+
+## 0.1.1 — 2026-09-01 (Evaluation and boundary refinements / 评估与边界收敛)
+
+> **在 0.1.0 的四套宿主基础上加入 Pi，并把评估证据拆开。** 0.1.1
+> 增加 Pi 原生 Extension，同时补齐 routing、Hook decision、task
+> acceptance 和 host effect 的独立观测边界。
+>
+> **Adds Pi to the 0.1.0 host set and separates evaluation evidence.**
+> Version 0.1.1 adds the native Pi Extension and keeps routing, Hook
+> decisions, task acceptance, and host effects as separate observations.
+
+### 新增 / New
+
+- **Pi Adapter**：支持 `@earendil-works/pi-coding-agent` `0.84.4`，复用共享
+  controller、Skill 和 metadata-only Runtime；文档化的 `subagent` 形式在
+  父工具调用处做原子预算控制，不宣称跨进程继承契约。
+  / Adds the Pi Adapter for `@earendil-works/pi-coding-agent` `0.84.4`,
+  reusing the shared controller, Skill, and metadata-only Runtime. Documented
+  `subagent` forms are budgeted atomically at the parent call; cross-process
+  contract inheritance is not claimed.
+- **Paired evaluation vNext**：加入不可变 Skill/CaseBundle digest；将 22 个
+  implicit-routing case 拆为 required、optional、irrelevant 三类，并单独验收
+  行为；三单元 host integration smoke 覆盖 mode deny、file-lock deny 和 allow。
+  默认成对矩阵为 16 cases × 3 arms × 3 runs = 144 个 session，默认仍只生成
+  计划。
+  / Adds immutable Skill and CaseBundle digests. The 22 implicit-routing cases
+  separate required, optional, and irrelevant routing from behavior acceptance.
+  A three-cell host integration smoke covers mode deny, file-lock deny, and
+  allow. The default paired matrix is 16 cases × 3 arms × 3 runs = 144 sessions
+  and remains dry-run by default.
+- **发布与验证边界**：保留 Good Case、基础设施错误、Hook decision 与
+  `hostEffect` 的分离，不把 deny 返回或离线 plan 包装成宿主阻断或模型效果
+  结论。
+  / Keeps Good Cases, infrastructure errors, Hook decisions, and
+  `hostEffect` separate; a returned deny or offline plan is not presented as
+  host enforcement or model-effect evidence.
+
 ## 0.1.0-shelios.3 — 2026-09-01 (Distinct Codex Marketplace / Codex Marketplace 独立命名)
 
 - Codex Marketplace ID 从 `stop-that-shit` 改为 `shelios-plugins`，插件 ID、

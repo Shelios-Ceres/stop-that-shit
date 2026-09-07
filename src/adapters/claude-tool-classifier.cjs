@@ -50,7 +50,9 @@ const DEPENDENCY_DECLARATION = /["']?(?:dependencies|devDependencies|optionalDep
 const HASH_API = /\b(?:createHash|createHmac)\s*\(|\bcrypto\.subtle\.digest\s*\(|\bhashlib\.(?:md5|sha1|sha224|sha256|sha384|sha512|blake2[bs])\s*\(|\bMessageDigest\.getInstance\s*\(|\bDigestUtils\.[A-Za-z0-9_]+\s*\(|\bsha(?:1|256|512)\.(?:New|Sum\w*)\s*\(|\b(?:bcrypt|argon2)\.hash\s*\(|\bpassword_hash\s*\(|\bPasswordHasher\s*\(/i;
 
 function isWindowsAbsolute(value) {
-  return /^[A-Za-z]:[\\/]/.test(String(value || '')) || /^\\\\[^\\]+\\[^\\]+/.test(String(value || ''));
+  const text = String(value || '');
+  return /^[A-Za-z]:[\\/]/.test(text) || /^\\\\[^\\]+\\[^\\]+/.test(text)
+    || (process.platform === 'win32' && /^\/\/[^/]+\/[^/]+/.test(text));
 }
 
 function normalizePath(value, cwd) {

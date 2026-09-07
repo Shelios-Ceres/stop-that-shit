@@ -1,5 +1,7 @@
 'use strict';
 
+const nodePath = require('node:path');
+
 function decision(outcome, family, reasonCode, explanation, nextStep) {
   return { outcome, family, reasonCode, explanation, nextStep };
 }
@@ -8,11 +10,43 @@ function controlledOutcome(level, guarded = 'deny_and_explain') {
   return level === 'watch' ? 'report_and_defer' : guarded;
 }
 
-function pathAllowed(path, allowedPaths) {
-  return allowedPaths.some((allowed) => {
-    if (allowed === '**') return true;
-    if (allowed.endsWith('/**')) return path === allowed.slice(0, -3) || path.startsWith(allowed.slice(0, -2));
-    return path === allowed;
+function isWindowsAbsolute(value) {
+  const text = String(value || '');
+  return /^[A-Za-z]:[\\/]|^\\\\/.test(text)
+    || (process.platform === 'win32' && /^\/\//.test(text));
+}
+
+function isAbsolutePath(value) {
+  return /^[A-Za-z]:[\\/]|^\\\\|^\/\//.test(String(value || ''))
+    || nodePath.posix.isAbsolute(String(value || '').replace(/\\/g, '/'));
+}
+
+function normalizeComparablePath(value, cwd) {
+  let normalized = String(value || '').trim().replace(/\\/g, '/');
+  if (!normalized) return '';
+  const base = String(cwd || '').trim();
+  const windowsStyle = isWindowsAbsolute(normalized) || isWindowsAbsolute(base);
+  if (base && windowsStyle && isAbsolutePath(normalized) && isAbsolutePath(base)) {
+    normalized = nodePath.win32.relative(base, normalized).replace(/\\/g, '/');
+  } else if (base && nodePath.posix.isAbsolute(normalized) && nodePath.posix.isAbsolute(base.replace(/\\/g, '/'))) {
+    normalized = nodePath.posix.relative(base.replace(/\\/g, '/'), normalized);
+  }
+  return nodePath.posix.normalize(normalized).replace(/^\.\//, '');
+}
+
+function pathAllowed(path, allowedPaths, cwd) {
+  const normalizedPath = normalizeComparablePath(path, cwd);
+  return allowedPaths.some((value) => {
+    const allowed = normalizeComparablePath(value, cwd);
+    const caseInsensitive = isWindowsAbsolute(cwd) || (isWindowsAbsolute(path) && isWindowsAbsolute(value));
+    const comparablePath = caseInsensitive ? normalizedPath.toLowerCase() : normalizedPath;
+    const comparableAllowed = caseInsensitive ? allowed.toLowerCase() : allowed;
+    if (comparableAllowed === '**') return true;
+    if (comparableAllowed.endsWith('/**')) {
+      const base = comparableAllowed.slice(0, -3);
+      return comparablePath === base || comparablePath.startsWith(`${base}/`);
+    }
+    return comparablePath === comparableAllowed;
   });
 }
 
@@ -66,17 +100,18 @@ function decide({ contract, action, state = {} }) {
     );
   }
 
-  if (Array.isArray(contract.allowedPaths) && Array.isArray(action.affectedPaths)) {
-    if (action.mutability === 'write' && action.affectedPaths.length === 0 && !contract.allowedPaths.includes('**')) {
+  if (Array.isArray(contract.allowedPaths)) {
+    const affectedPaths = Array.isArray(action.affectedPaths) ? action.affectedPaths : [];
+    if (['write', 'unknown'].includes(action.mutability) && affectedPaths.length === 0 && !contract.allowedPaths.includes('**')) {
       return decision(
         controlledOutcome(level, 'require_user_approval'),
         'S',
         'WRITE_PATH_UNPROVEN',
-        'The action writes through a tool whose target path is not proven inside the declared file boundary.',
+        'The action may write through a tool whose target path is not proven inside the declared file boundary.',
         'Use apply_patch or an Edit tool with visible paths, or obtain approval for an explicit broader boundary.'
       );
     }
-    const outside = action.affectedPaths.filter((path) => !pathAllowed(path, contract.allowedPaths));
+    const outside = affectedPaths.filter((path) => !pathAllowed(path, contract.allowedPaths, action.cwd));
     if (outside.length) {
       return decision(
         controlledOutcome(level),
