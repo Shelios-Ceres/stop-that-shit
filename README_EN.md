@@ -98,7 +98,7 @@ Version `0.2.0` keeps the Stop Ladder, Guard, five host Adapters, and paired cas
 
 Compared with upstream [`lennney/stop-that-shit`](https://github.com/lennney/stop-that-shit), this fork extends subagent authorization and task-contract parsing:
 
-Current release: [`0.2.1-shelios.1`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.1), based on upstream `0.2.1`.
+Current release: [`0.2.1-shelios.2`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.2), based on upstream `0.2.1`.
 
 - Includes upstream scoped file fixes, Pi, STSS, and expanded evaluation tools. `sts doctor --check-update` checks this fork's releases; default diagnostics read the `shelios-plugins` runtime data.
 - Adds `agents=allow`, which removes only the cumulative limit for **observable, explicit delegation**. `agents=N` retains its existing cumulative budget of `0–8`.
@@ -110,12 +110,14 @@ Current release: [`0.2.1-shelios.1`](https://github.com/Shelios-Ceres/stop-that-
 
 Install this fork to use these changes:
 
+Existing `shelios-plugins` users must follow the [pinned upgrade steps](INSTALL.md#upgrade-from-010-shelios3) before adding the new ref.
+
 If `0.1.0-shelios.2` is already installed, follow the
 [upgrade steps](INSTALL.md#upgrade-from-010-shelios2) first. Do not install the
 new Marketplace identity alongside the old one.
 
 ```bash
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.1
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.2
 codex plugin add stop-that-shit@shelios-plugins
 ```
 
@@ -150,15 +152,17 @@ Restart Claude Code or run `/reload-plugins`, then invoke:
 
 ### Codex
 
+Existing `shelios-plugins` users: follow the [pinned upgrade steps](INSTALL.md#upgrade-from-010-shelios3) first.
+
 When upgrading from `0.1.0-shelios.2`, complete the
 [old-identity migration](INSTALL.md#upgrade-from-010-shelios2) first.
 
 ```bash
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.1
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.2
 codex plugin add stop-that-shit@shelios-plugins
 ```
 
-`--ref 0.2.1-shelios.1` pins the install to a version tag instead of mutable
+`--ref 0.2.1-shelios.2` pins the install to a version tag instead of mutable
 `main`. Restart Codex. In a fresh CLI TUI, enter `/hooks` and trust
 `UserPromptSubmit` and `PreToolUse` after inspecting their commands. You can
 also give [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md) to Codex for the
@@ -215,7 +219,7 @@ invoke:
 /skill:stop-that-shit review -- Review this diff. Report findings; do not edit.
 ```
 
-The `0.2.1-shelios.1` tag includes the Pi adapter and both Skills. See [INSTALL.md](INSTALL.md#pi-coding-agent).
+The `0.2.1-shelios.2` tag includes the Pi adapter and both Skills. See [INSTALL.md](INSTALL.md#pi-coding-agent).
 
 ## Bad Case / Good Case
 
@@ -493,7 +497,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, the remote Skill Installer path is:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.1-shelios.1/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.1-shelios.2/skills/stop-that-shit
 ```
 
 Start a new task, then invoke the host-native Skill form. A standalone Claude Code skill is `/stop-that-shit`; an installed plugin skill is namespaced as `/stop-that-shit:stop-that-shit`; Codex uses `$stop-that-shit`. This path needs no Hook trust,

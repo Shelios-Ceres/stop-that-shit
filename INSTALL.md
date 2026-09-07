@@ -1,7 +1,7 @@
-# Install Stop That Shit 0.2.1-shelios.1
+# Install Stop That Shit 0.2.1-shelios.2
 
 The current multi-platform release is
-[`0.2.1-shelios.1`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.1), based on upstream [`0.2.1`](https://github.com/lennney/stop-that-shit/releases/tag/0.2.1).
+[`0.2.1-shelios.2`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.2), based on upstream [`0.2.1`](https://github.com/lennney/stop-that-shit/releases/tag/0.2.1).
 
 If an agent is doing the installation for you, give it
 [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md). That guide separates commands
@@ -38,8 +38,11 @@ pre-expansion arming; the adapter keeps that handler, but the packaged
 The Guard requires Node.js 18 or newer. Add the repository as a Codex
 marketplace, then install the plugin:
 
+If `shelios-plugins` is already registered, follow the
+[pinned upgrade steps](#upgrade-from-010-shelios3) first.
+
 ```powershell
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.1
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.2
 codex plugin add stop-that-shit@shelios-plugins
 ```
 
@@ -47,10 +50,20 @@ Restart Codex after installation.
 
 ### Upgrade from `0.1.0-shelios.3`
 
-Keep the existing `shelios-plugins` Marketplace and install the new pinned
-release using the two commands above. The plugin ID is unchanged, so this
-upgrade does not require uninstalling the plugin or migrating its runtime data.
-Use a new task after installation. Review `/hooks` if the host requests it.
+When changing the pinned Git tag, current Codex requires removing the old
+Marketplace registration first. This removes the source snapshot, not the
+installed plugin or its runtime data. The same steps apply to later upgrades
+from `0.2.1-shelios.1`.
+
+```powershell
+codex plugin marketplace remove shelios-plugins
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.2
+codex plugin add stop-that-shit@shelios-plugins
+```
+
+The plugin ID and Hook keys remain unchanged. Use a new task after installation
+and review `/hooks` only if the host requests it. The `marketplace upgrade`
+command refreshes the configured ref; it does not select a newer release tag.
 
 ### Upgrade from `0.1.0-shelios.2`
 
@@ -61,7 +74,7 @@ enabled at the same time:
 ```powershell
 codex plugin remove stop-that-shit@stop-that-shit
 codex plugin marketplace remove stop-that-shit
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.1
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.2
 codex plugin add stop-that-shit@shelios-plugins
 ```
 
@@ -225,11 +238,11 @@ From a checkout that contains the Pi adapter, install it globally:
 pi install /absolute/path/to/stop-that-shit
 ```
 
-Add `-l` for a project-scoped installation. The `0.2.1-shelios.1` tagged release contains
+Add `-l` for a project-scoped installation. The `0.2.1-shelios.2` tagged release contains
 the Pi adapter; use this pinned Git ref instead of an unpinned branch:
 
 ```bash
-pi install git:github.com/Shelios-Ceres/stop-that-shit@0.2.1-shelios.1
+pi install git:github.com/Shelios-Ceres/stop-that-shit@0.2.1-shelios.2
 ```
 
 Start a new Pi process, or run `/reload` in the TUI after changing package
@@ -259,10 +272,10 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, ask the built-in Skill Installer to install the shared Skill folder:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.1-shelios.1/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.1-shelios.2/skills/stop-that-shit
 ```
 
-To install only Stop That Shit Slop from a `0.2.1-shelios.1` checkout:
+To install only Stop That Shit Slop from a `0.2.1-shelios.2` checkout:
 
 ```bash
 npx skills add ./skills/stss --global

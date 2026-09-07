@@ -48,10 +48,13 @@ general improvement in model behavior.
    codex plugin marketplace remove stop-that-shit
    ```
 
-3. Run these commands one at a time:
+3. If `shelios-plugins` is already registered at a different Git ref or source,
+   run `codex plugin marketplace remove shelios-plugins` before adding the new
+   ref. This does not uninstall the same-ID plugin or delete its runtime data.
+   Then run these commands one at a time:
 
    ```powershell
-   codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.1
+   codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.2
    codex plugin add stop-that-shit@shelios-plugins
    ```
 
@@ -135,10 +138,10 @@ general improvement in model behavior.
 If the user does not want Hooks, install the advisory Skill instead:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.1-shelios.1/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.1-shelios.2/skills/stop-that-shit
 ```
 
-If the user asks for only Stop That Shit Slop, run this from a `0.2.1-shelios.1` checkout:
+If the user asks for only Stop That Shit Slop, run this from a `0.2.1-shelios.2` checkout:
 
 ```bash
 npx skills add ./skills/stss --global

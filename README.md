@@ -87,7 +87,7 @@ Stop Ladder 继续判断一个动作该不该做。新增的 **Stop That Shit Sl
 
 与上游 [`lennney/stop-that-shit`](https://github.com/lennney/stop-that-shit) 相比，本 Fork 主要补充了 subagent 授权和任务契约解析：
 
-当前正式版本：[`0.2.1-shelios.1`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.1)，基于上游 `0.2.1`。
+当前正式版本：[`0.2.1-shelios.2`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.2)，基于上游 `0.2.1`。
 
 - 包含上游 `files=` 修复、Pi Adapter、STSS 与新增评测；`sts doctor --check-update` 查询此 Fork 的发布，默认诊断读取 `shelios-plugins` 的运行数据。
 - 新增 `agents=allow`：只取消**可观察、显式 delegation** 的累计数量上限；`agents=N` 仍保留原有的 `0–8` 累计预算。
@@ -99,11 +99,13 @@ Stop Ladder 继续判断一个动作该不该做。新增的 **Stop That Shit Sl
 
 要安装包含这些改动的版本，请使用本 Fork：
 
+已使用 `shelios-plugins` 的用户，先按[固定版本升级步骤](INSTALL.md#upgrade-from-010-shelios3)重新登记版本来源。
+
 如果已经安装 `0.1.0-shelios.2`，请先按[升级步骤](INSTALL.md#upgrade-from-010-shelios2)
 移除旧插件和旧 Marketplace，不能直接叠加安装。
 
 ```bash
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.1
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.2
 codex plugin add stop-that-shit@shelios-plugins
 ```
 
@@ -133,14 +135,16 @@ claude plugin install stop-that-shit@stop-that-shit
 
 ### Codex
 
+已安装在 `shelios-plugins` 下的用户先完成[固定版本升级](INSTALL.md#upgrade-from-010-shelios3)。
+
 从 `0.1.0-shelios.2` 升级时，请先完成[旧身份迁移](INSTALL.md#upgrade-from-010-shelios2)。
 
 ```bash
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.1
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.2
 codex plugin add stop-that-shit@shelios-plugins
 ```
 
-`--ref 0.2.1-shelios.1` 把安装固定到版本 tag，不跟随可变的 `main`。重启 Codex。在新的 CLI TUI 中输入 `/hooks`，检查命令后信任 `UserPromptSubmit` 和 `PreToolUse`。也可以把 [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md) 交给 Codex，让它完成非交互步骤。
+`--ref 0.2.1-shelios.2` 把安装固定到版本 tag，不跟随可变的 `main`。重启 Codex。在新的 CLI TUI 中输入 `/hooks`，检查命令后信任 `UserPromptSubmit` 和 `PreToolUse`。也可以把 [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md) 交给 Codex，让它完成非交互步骤。
 
 ### OpenCode 从 GitHub 安装
 
@@ -186,7 +190,7 @@ pi install /absolute/path/to/stop-that-shit
 /skill:stop-that-shit review -- Review 这个 diff，只报告问题，不要修改。
 ```
 
-从 `0.2.1-shelios.1` tag 安装即可获得 Pi Adapter 和两个 Skill。详见 [INSTALL.md](INSTALL.md#pi-coding-agent)。
+从 `0.2.1-shelios.2` tag 安装即可获得 Pi Adapter 和两个 Skill。详见 [INSTALL.md](INSTALL.md#pi-coding-agent)。
 
 ## Bad Case / Good Case
 
@@ -425,7 +429,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 Codex 仍可使用远程 Skill Installer：
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.1-shelios.1/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.1-shelios.2/skills/stop-that-shit
 ```
 
 新开任务后，独立 Claude Code Skill 用 `/stop-that-shit`，作为 plugin 安装时用 namespaced `/stop-that-shit:stop-that-shit`；Codex 用 `$stop-that-shit`。Skill-only 路径不需要 Hook 信任，但不能机器拦截越界动作，也不会改变宿主原有的 sandbox 和 approval 设置。

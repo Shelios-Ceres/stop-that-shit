@@ -4,6 +4,14 @@
 
 No unreleased changes yet.
 
+## 0.2.1-shelios.2 — 2026-09-07 (Pinned upgrade instructions / 固定版本升级说明)
+
+- 实测当前 Codex 将不同 Git ref 视为不同 Marketplace 来源。升级说明补上
+  重新登记来源的步骤，保留同名插件、缓存和运行数据；修正所有升级入口。
+  / Documents the verified remove-registration/add-source/install sequence
+  required by current Codex for a pinned ref change, preserving the installed
+  plugin and runtime data. Guard behavior is unchanged from shelios.1.
+
 ## 0.2.1-shelios.1 — 2026-09-07 (Upstream integration / 上游合入)
 
 - 完整合入上游 0.2.1，包括受限 `files=` 修复、Pi Adapter、STSS Skill、

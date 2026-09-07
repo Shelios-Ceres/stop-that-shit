@@ -11,8 +11,8 @@ actions, context responses, and permission denies. It records host effect as
 `unobserved`; a returned permission deny is not evidence that the host skipped
 the action.
 
-Version: 0.2.1-shelios.1 Upstream integration with preserved fork behavior
-Release: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.1
+Version: 0.2.1-shelios.2 Upstream integration with preserved fork behavior
+Release: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.2
 Upstream baseline: https://github.com/lennney/stop-that-shit/releases/tag/0.2.1
 Previous fork: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.3
 Last updated: 2026-09-07
@@ -23,6 +23,9 @@ Last updated: 2026-09-07
   smoke is skipped. The 18 executable policy case arms pass.
 - The release allowlist covers 188 files; the generated Hermes runtime and
   CaseBundle validator are checked against their sources.
+- An isolated Git-backed install upgraded from `0.1.0-shelios.3` to the new
+  integration by removing only the Marketplace registration, adding the new
+  tag, and reinstalling the same plugin ID. The old cache was preserved.
 - A separate Codex profile installs the built package. Host `skills/list`
   discovers both `stop-that-shit` and `stss`, and `hooks/list` resolves the
   two unchanged Hook definitions from the versioned `shelios-plugins` cache.
@@ -291,7 +294,7 @@ leading synthetic fixtures.
 Do not claim that Stop That Shit solves overengineering across coding agents or
 publish an improvement percentage from unit tests or this single scenario.
 
-The defensible 0.2.1-shelios.1 claim is:
+The defensible 0.2.1-shelios.2 claim is:
 
 > In Codex, Claude Code, OpenCode, Hermes Agent CLI, and Pi, Stop That Shit provides
 > a short on-demand decision ladder and enforces a few explicit task-authority
