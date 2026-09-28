@@ -16,6 +16,42 @@ Release: https://github.com/lennney/stop-that-shit/releases/tag/0.2.3
 Previous release: https://github.com/lennney/stop-that-shit/releases/tag/0.2.2
 Last updated: 2026-09-24
 
+## Unreleased OpenCode V1/V2 adapter — 2026-09-28
+
+This working-tree candidate builds on 0.2.3; the published 0.2.3 release does
+not contain the V2 adapter. One package provides native V1 and V2 entrypoints
+and uses the existing shared policy/controller.
+
+On Windows x64, the actual candidate was packed with `npm pack`, installed
+with lifecycle scripts disabled, and loaded by OpenCode **1.18.18** and
+**2.0.18** in separate disposable workspaces. Both real CLI processes passed:
+
+- explicit `review` denied a native write with `MODE_FORBIDS_MUTATION` returned
+  to the local model stand-in, and the target file remained absent;
+- the same session completed a permitted read after that denial;
+- a fresh CLI process resumed that session, accepted explicit `change`, wrote
+  the expected file, and persisted the updated contract.
+
+The tests use deterministic local model responses and raw stdin directives.
+They verify installed-host behavior on these paths, not model effectiveness.
+The local V2 directory path requires the packaged root `server.mjs` entry.
+GitHub-source installation of this unreleased candidate remains unverified.
+
+Local verification:
+
+- `npm test`: 424 passed, 3 optional host checks skipped, zero failed;
+- the separate packed-host invocation enabled both new checks: 2 passed;
+- `npm run eval`: 18/18 paired-case arms passed;
+- `npm run release:check`: passed for 205 allowlisted files;
+- `git diff --check`: passed.
+
+V2 regressions cover native tool inputs, child budget retention/release,
+synthetic and child message exclusion, invalid directives across reload,
+session permission overrides, and nonmonotonic IDs after compaction. Child
+lifecycle and Code Mode were not exercised by the installed-host smoke.
+Direct Code Mode JavaScript/network effects remain outside complete tool-hook
+coverage. Runtime `hostEffect` remains `unobserved`.
+
 ## 0.2.3 release candidate
 
 The candidate includes merged fixes #51–#55, scanner-report retention #56,
