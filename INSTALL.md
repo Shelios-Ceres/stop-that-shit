@@ -1,6 +1,6 @@
 # Install Stop That Shit
 
-These instructions target [`0.2.3`](https://github.com/lennney/stop-that-shit/releases/tag/0.2.3).
+These instructions target [`0.2.4`](https://github.com/lennney/stop-that-shit/releases/tag/0.2.4).
 
 For local checkout validation, use the flow under
 [Local Guard development](#local-guard-development).
@@ -45,7 +45,7 @@ The Guard requires Node.js 18 or newer. Add the repository as a Codex
 marketplace, then install the plugin:
 
 ```powershell
-codex plugin marketplace add lennney/stop-that-shit --ref 0.2.3
+codex plugin marketplace add lennney/stop-that-shit --ref 0.2.4
 codex plugin add stop-that-shit@stop-that-shit
 ```
 
@@ -233,9 +233,8 @@ configuration's `plugin` list, then restart OpenCode.
 ### OpenCode V2
 
 The V2 adapter in this checkout targets OpenCode **2.0.18**. It shares the same
-package and policy core with V1; V1's minimum remains **1.18.18**. The published
-0.2.3 release predates this adapter, so installing that release does not add V2
-support.
+package and policy core with V1; V1's minimum remains **1.18.18**. V2 support
+starts with release 0.2.4.
 
 For local acceptance, install this checkout's dependencies with
 `npm ci --ignore-scripts`, then configure its **package directory**:
@@ -254,10 +253,10 @@ contains `package.json`. A packed local artifact can instead be installed with
 `npm install --ignore-scripts /path/to/stop-that-shit.tgz`; configure the installed
 `node_modules/stop-that-shit` directory. This does not require lifecycle scripts.
 
-For a GitHub revision containing the adapter, the V2 CLI command is
+The V2 CLI command is
 `opencode plugin add github:lennney/stop-that-shit`. V2 `plugin add` accepts npm
 and Git sources, not local `.tgz` files. Local packed-host acceptance does not
-establish that an unpublished revision can be installed from GitHub.
+establish GitHub-source installation; use the directory route for a local checkout.
 
 Restart OpenCode and use the same `$stop-that-shit review` / `change` commands.
 For noninteractive `opencode run`, pass the directive through stdin: these
@@ -278,8 +277,8 @@ existing policy; permitting it in change mode does not establish full coverage.
 
 To remove the V2 plugin, remove its entry from `plugins` and restart. Keep the
 same `dataDir` if one was configured. V2 plugin storage holds processed message
-IDs until session deletion; contract state and runtime evidence retain their
-existing format.
+IDs and pending status/runtime query replies until delivery or session deletion.
+Contract state and runtime evidence retain their existing format.
 
 Maintainers can run the packed-host checks with `STS_OPENCODE_V1_BIN` and
 `STS_OPENCODE_V2_BIN` set to the respective executables:
@@ -323,7 +322,7 @@ Add `-l` for a project-scoped installation. The tagged release contains
 the Pi adapter; use this pinned Git ref instead of an unpinned branch:
 
 ```bash
-pi install git:github.com/lennney/stop-that-shit@0.2.3
+pi install git:github.com/lennney/stop-that-shit@0.2.4
 ```
 
 Start a new Pi process, or run `/reload` in the TUI after changing package
@@ -353,7 +352,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, ask the built-in Skill Installer to install the shared Skill folder:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.2.3/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.2.4/skills/stop-that-shit
 ```
 
 To install only Stop That Shit Slop from the tagged checkout:

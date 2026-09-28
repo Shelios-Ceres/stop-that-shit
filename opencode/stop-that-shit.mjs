@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { directiveErrorText, mentionsDirective, resolveDataDir } from './runtime.mjs';
-import { openCodeV2Effect } from './v2.mjs';
+import * as Effect from 'effect/Effect';
 
 const require = createRequire(import.meta.url);
 const {
@@ -346,4 +346,10 @@ export const StopThatShitPlugin = async ({ client, directory }, options = {}) =>
 };
 
 // Both loaders resolve ./server. Each host selects its own native adapter.
-export default { id: 'stop-that-shit', server: StopThatShitPlugin, effect: openCodeV2Effect };
+export default {
+  id: 'stop-that-shit',
+  server: StopThatShitPlugin,
+  // V1 does not need to load the V2 schema and hook implementation.
+  effect: (ctx) => Effect.flatMap(Effect.promise(() => import('./v2.mjs')),
+    ({ openCodeV2Effect }) => openCodeV2Effect(ctx)),
+};

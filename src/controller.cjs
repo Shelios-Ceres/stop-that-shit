@@ -285,4 +285,4 @@ function handleControlEvent(rawEvent, options = {}) {
   }
 }
 
-module.exports = { contractContext, handleControlEvent };
+module.exports = { contractContext, handleControlEvent, runtimeCommand };

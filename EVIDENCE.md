@@ -11,14 +11,14 @@ actions, context responses, and permission denies. It records host effect as
 `unobserved`; a returned permission deny is not evidence that the host skipped
 the action.
 
-Version: 0.2.3 Guard and Codex lifecycle fixes
-Release: https://github.com/lennney/stop-that-shit/releases/tag/0.2.3
-Previous release: https://github.com/lennney/stop-that-shit/releases/tag/0.2.2
-Last updated: 2026-09-24
+Version: 0.2.4 OpenCode V1/V2 compatibility
+Release: https://github.com/lennney/stop-that-shit/releases/tag/0.2.4
+Previous release: https://github.com/lennney/stop-that-shit/releases/tag/0.2.3
+Last updated: 2026-09-28
 
-## Unreleased OpenCode V1/V2 adapter — 2026-09-28
+## 0.2.4 OpenCode V1/V2 adapter — 2026-09-28
 
-This working-tree candidate builds on 0.2.3; the published 0.2.3 release does
+This candidate builds on 0.2.3; the published 0.2.3 release does
 not contain the V2 adapter. One package provides native V1 and V2 entrypoints
 and uses the existing shared policy/controller.
 
@@ -39,7 +39,9 @@ GitHub-source installation of this unreleased candidate remains unverified.
 
 Local verification:
 
-- `npm test`: 424 passed, 3 optional host checks skipped, zero failed;
+- `npm test`: 428 passed, 3 optional host checks skipped, zero failed. Four
+  review regressions cover unrelated-root progress, fresh permissions after
+  waiting, and runtime replies consumed first by tool/child hooks.
 - the separate packed-host invocation enabled both new checks: 2 passed;
 - `npm run eval`: 18/18 paired-case arms passed;
 - `npm run release:check`: passed for 205 allowlisted files;
@@ -51,6 +53,27 @@ session permission overrides, and nonmonotonic IDs after compaction. Child
 lifecycle and Code Mode were not exercised by the installed-host smoke.
 Direct Code Mode JavaScript/network effects remain outside complete tool-hook
 coverage. Runtime `hostEffect` remains `unobserved`.
+
+The defensible 0.2.4 claim is: the packaged adapters enforce the tested review
+denial and explicit change paths in both pinned OpenCode hosts. Other host
+surfaces and model effectiveness require separate evidence.
+
+### Adapter design and performance review
+
+Root-scoped permits replace the plugin-wide wait queue; a blocked context
+fetch no longer holds up unrelated roots. A deterministic regression holds
+one root's context operation open while another root completes its denial.
+Metadata is refreshed inside the permit so queued hooks use current session
+permissions. Runtime query replies are retained for the root model context,
+including across reload, instead of disappearing when another hook reads them.
+
+V1 defers loading the V2 implementation and schema. A Windows Node.js local
+microbenchmark measured entry import at about 401 ms before and 203 ms after.
+Tool-check median latency varied from 3.4 to 4.7 ms on minimal history and
+6.4 to 7.4 ms with 1,000 synthetic 2 KiB assistant messages (120 iterations
+per case). These runs show reduced entry import cost, not reduced per-tool
+latency or end-to-end model latency. Context is still fetched before actions
+so newly delivered authority is not hidden by a cache.
 
 ## 0.2.3 release candidate
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.4 — 2026-09-28 (OpenCode V1/V2 compatibility / 双版本兼容)
+
+- 一个包提供 V1 server 和 V2 Effect 适配器，复用现有 Guard 核心。
+  实测版本为 OpenCode 1.18.18 和 2.0.18；V1 最低版本保持不变。
+  / One package provides native V1 and V2 adapters over the existing Guard core.
+- V2 使用原生工具错误拒绝动作，保留后续允许动作；仅以已投递的根用户
+  消息更新合同，处理子代理预算、压缩后的消息去重和会话权限覆盖。
+  / V2 returns typed tool errors, synchronizes delivered root messages, and
+  maps child budgets, message identity after compaction, and session overrides.
+- 修正本地目录入口、等待期间的旧权限和被其他 Hook 消耗的运行时查询回复。
+  / Fix local directory discovery, stale permissions after waiting, and lost
+  runtime-query replies when another hook synchronizes the message first.
+- 按根会话串行，避免无关会话互相等待；V1 延迟加载 V2 实现。
+  / Serialize per root and defer V2 implementation loading for V1.
+
+安装步骤和验证范围见 [INSTALL.md](INSTALL.md) 与 [EVIDENCE.md](EVIDENCE.md)。
+Code Mode 的直接 JavaScript/network 副作用不承诺完整拦截。
+See the same documents for installation and evidence. Direct Code Mode
+JavaScript/network effects are not fully covered by tool hooks.
+
 ## 0.2.3 — 2026-09-24 (Read-only boundaries and Codex delegation / 只读边界与 Codex 委派)
 
 `review` 中的复合命令现在会检查每一步：先读取、后写入，仍按写入拒绝。

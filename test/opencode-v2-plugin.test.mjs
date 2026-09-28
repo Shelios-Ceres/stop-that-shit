@@ -143,3 +143,79 @@ test('V2 consumes delivered messages in context order when IDs are not monotonic
   h.messages.get('root').push(user('msg_001', '$stop-that-shit change'));
   assert.equal((await before())._tag, 'Success');
 });
+
+test('V2 keeps an unrelated root responsive while another root waits for context', async (t) => {
+  const h = await host(t);
+  h.sessions.set('other', { id: 'other', location: { directory: '/repo' }, agent: 'build' });
+  h.messages.set('other', [user('other-1', '$stop-that-shit review')]);
+  h.messages.get('root').push(user('root-1', '$stop-that-shit change'));
+  let entered, release;
+  const started = new Promise((resolve) => { entered = resolve; });
+  const blocked = new Promise((resolve) => { release = resolve; });
+  h.ctx.session.context = ({ sessionID }) => sessionID === 'root'
+    ? Effect.promise(async () => { entered(); await blocked; return h.messages.get('root'); })
+    : Effect.succeed(h.messages.get(sessionID));
+  const first = h.run(h.hooks.tool['execute.before'](write('slow')));
+  await started;
+  try {
+    const other = await h.run(Effect.result(h.hooks.tool['execute.before'](write('fast', 'other'))).pipe(
+      Effect.timeout('1 second'),
+    ));
+    assert.equal(other._tag, 'Failure');
+    assert.match(other.failure.message, /MODE_FORBIDS_MUTATION/);
+  } finally {
+    release();
+    await first;
+  }
+});
+
+test('V2 refreshes permissions after waiting for another hook in the same root', async (t) => {
+  const h = await host(t);
+  h.messages.get('root').push(user('u1', '$stop-that-shit review'));
+  await h.run(Effect.result(h.hooks.tool['execute.before'](write())));
+  let entered, release, secondResolved;
+  const started = new Promise(resolve => { entered = resolve; });
+  const blocked = new Promise(resolve => { release = resolve; });
+  const queued = new Promise(resolve => { secondResolved = resolve; });
+  let contexts = 0;
+  h.ctx.session.get = ({ sessionID }) => Effect.sync(() => {
+    if (contexts === 1) secondResolved();
+    return structuredClone(h.sessions.get(sessionID));
+  });
+  h.ctx.session.context = () => Effect.promise(async () => {
+    if (++contexts === 1) { const snapshot = [...h.messages.get('root')]; entered(); await blocked; return snapshot; }
+    return h.messages.get('root');
+  });
+  const first = h.run(Effect.result(h.hooks.tool['execute.before'](write('first'))));
+  await started;
+  const second = h.run(Effect.result(h.hooks.tool['execute.before'](write('second'))));
+  // Initial lookup of the second hook happens before it waits on the root.
+  await queued;
+  h.sessions.get('root').permissions = [{ action: 'edit', resource: '*', effect: 'deny' }];
+  h.messages.get('root').push(user('u2', 'Continue reviewing.'));
+  release();
+  await first;
+  assert.equal((await second)._tag, 'Failure');
+});
+
+for (const consumer of ['tool', 'child context']) {
+  test(`V2 retains a runtime reply when ${consumer} synchronizes root messages first`, async (t) => {
+    const h = await host(t);
+    h.messages.get('root').push(user('u1', '$stop-that-shit runtime'));
+    if (consumer === 'tool') {
+      await h.run(h.hooks.tool['execute.before']({ ...write(), tool: 'read' }));
+    } else {
+      h.sessions.set('child', { id: 'child', parentID: 'root', location: { directory: '/repo' } });
+      const child = { sessionID: 'child', system: [] };
+      await h.run(h.hooks.session.context(child));
+      assert.ok(!JSON.stringify(child.system).includes('Checked actions:'));
+    }
+    await h.run(entry.default.effect(h.ctx));
+    const rootContext = { sessionID: 'root', system: [] };
+    await h.run(h.hooks.session.context(rootContext));
+    assert.match(JSON.stringify(rootContext.system), /Checked actions:/);
+    const next = { sessionID: 'root', system: [] };
+    await h.run(h.hooks.session.context(next));
+    assert.ok(!JSON.stringify(next.system).includes('Checked actions:'));
+  });
+}

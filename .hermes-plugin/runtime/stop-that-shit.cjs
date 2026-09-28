@@ -563,7 +563,7 @@ function handleControlEvent(rawEvent, options = {}) {
   }
 }
 
-module.exports = { contractContext, handleControlEvent };
+module.exports = { contractContext, handleControlEvent, runtimeCommand };
 
 },
 "src/contracts.cjs": function(module, exports, __require) {
@@ -1469,7 +1469,7 @@ module.exports = { readRuntime, recordDecision };
 "package.json": function(module, exports, __require) {
 module.exports = {
   "name": "stop-that-shit",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Keep agent work bounded and reduce defensive wording in Codex, Claude Code, OpenCode, Hermes Agent CLI, and Pi",
   "keywords": [
@@ -2569,7 +2569,7 @@ module.exports = { optionalIdentifier, readAsyncLaunched };
 };
 __modules["package.json"] = function(module) { module.exports = {
   "name": "stop-that-shit",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Keep agent work bounded and reduce defensive wording in Codex, Claude Code, OpenCode, Hermes Agent CLI, and Pi",
   "keywords": [

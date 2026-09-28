@@ -232,7 +232,8 @@ normalize POSIX and Windows absolute paths relative to Hook `cwd` when possible.
 The package default export combines `id`, the V1 `server`, and a V2 `effect`.
 Both package entrypoints resolve to this object; host loaders choose their
 native adapter. V2 targets 2.0.18 and uses the matching schema and Effect
-runtime dependencies. The named V1 `StopThatShitPlugin` export remains available.
+runtime dependencies. V1 loads the V2 implementation lazily. The named V1
+`StopThatShitPlugin` export remains available.
 The root `server.mjs` also exposes the combined default for V2 local-directory
 discovery, which probes physical entry files rather than package exports.
 
@@ -310,6 +311,10 @@ remain in their existing storage. Editable-agent promotion is limited to the
 newest plain root user message and requires a resolved edit-capable agent,
 including session permission overrides. Message IDs are tracked as identities,
 never interpreted as delivery order; compaction does not reset that record.
+Synchronization is serialized per root so unrelated sessions can proceed.
+Session metadata is refreshed after acquiring the permit. Pending runtime
+query replies survive other hooks and plugin reloads until the root context
+consumes them; child context cannot consume those replies.
 
 The adapter normalizes `shell` to shell analysis, `patch.patchText` to patch
 analysis, and `write/edit.path` to the shared file classifier. File paths use
