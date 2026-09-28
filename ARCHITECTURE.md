@@ -106,7 +106,7 @@ unknown-status calls remain reserved until confirmed bound-child completion or a
 `action=list`, `action=steer`, and `action=stop` are control operations and
 consume zero budget units.
 
-The OpenCode plugin can load from a local file or GitHub package and uses only
+The OpenCode V1 adapter can load from a local file or GitHub package and uses only
 documented hooks: `message.part.updated` and session events through `event`, plus
 `tool.execute.before` and `tool.execute.after`. It recovers user messages with
 the SDK `client.session.message` call, injects contract context with
@@ -116,6 +116,12 @@ An embedded directive mention cannot arm the contract or trigger the plugin's
 implicit promotion from review to an editable host mode. Separate text parts
 are joined with newlines, so directive fields must stay in the first part's
 first non-empty line.
+
+The same package provides a V2 Effect adapter with native session context,
+tool execution, and child lifecycle hooks. It reads delivered root user
+messages and returns typed tool errors for denials. See the
+[OpenCode mapping](HOST-ADAPTER-CONTRACT.md#opencode-mapping) for version and
+tool-coverage boundaries.
 
 Pi maps `input`, `before_agent_start`, `tool_call`, `tool_result`, and
 `session_shutdown`. The first two arm and inject the shared contract;

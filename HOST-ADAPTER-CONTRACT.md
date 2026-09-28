@@ -229,7 +229,17 @@ normalize POSIX and Windows absolute paths relative to Hook `cwd` when possible.
 
 ## OpenCode mapping
 
-The OpenCode plugin uses the documented plugin surface only: the `event` hook
+The package default export combines `id`, the V1 `server`, and a V2 `effect`.
+Both package entrypoints resolve to this object; host loaders choose their
+native adapter. V2 targets 2.0.18 and uses the matching schema and Effect
+runtime dependencies. V1 loads the V2 implementation lazily. The named V1
+`StopThatShitPlugin` export remains available.
+The root `server.mjs` also exposes the combined default for V2 local-directory
+discovery, which probes physical entry files rather than package exports.
+
+### V1
+
+The V1 plugin uses the documented plugin surface only: the `event` hook
 (`message.part.updated` plus `session.created`/`session.updated`/
 `session.deleted`), `tool.execute.before`, and `tool.execute.after`. It does not
 use the undocumented `chat.message` hook.
@@ -284,6 +294,46 @@ continuations because a reused child session ID does not identify its run.
 Use a new task call instead. Without a finite limit, continuations are unchanged.
 If ancestry cannot be resolved, it fails open
 without treating the uncertain child prompt as user authority.
+
+### V2
+
+V2 registers native `session.context`, `tool.execute.before/after`, and a scoped
+event subscription through the Effect API. A deliberate denial is a failed
+`Tool.Error`, not a rejected Promise converted into a defect. Unexpected adapter
+failures remain host errors; they do not silently authorize the action.
+
+Before model context or tool execution, the adapter resolves session ancestry
+and synchronizes delivered root user messages from `session.context`. It never
+arms a contract from the pre-admission prompt hook. Synthetic messages and child
+prompts cannot change the root contract. Plugin storage checkpoints processed
+message IDs across reloads; the shared contract, invalid-input state and ledger
+remain in their existing storage. Editable-agent promotion is limited to the
+newest plain root user message and requires a resolved edit-capable agent,
+including session permission overrides. Message IDs are tracked as identities,
+never interpreted as delivery order; compaction does not reset that record.
+Synchronization is serialized per root so unrelated sessions can proceed.
+Session metadata is refreshed after acquiring the permit. Pending runtime
+query replies survive other hooks and plugin reloads until the root context
+consumes them; child context cannot consume those replies.
+
+The adapter normalizes `shell` to shell analysis, `patch.patchText` to patch
+analysis, and `write/edit.path` to the shared file classifier. File paths use
+the calling session's directory, rather than the plugin's loading directory.
+Call identity includes the assistant message, tool-call ID and tool name; the
+controller also namespaces child calls by their source session.
+
+Native `subagent` calls reserve one unit. A completed tool result with a child
+session ID and `status: completed` joins the call; `status: running` binds the
+child while retaining its unit. Failed or unrecognized results do not prove
+completion. Child execution success/failure and user interruption provide
+terminal facts; shutdown, superseding work, ordinary idle and deletion do not.
+Finite limits reject `sessionID` continuations, whose events lack run identity.
+Missed or unprovable completion retains capacity, including across reloads.
+
+Code Mode is not a whole-program enforcement boundary: direct network effects
+do not traverse tool hooks, and nested calls can share an outer call ID. The
+adapter keeps the core's unknown-action policy; it does not promise full Code
+Mode coverage or introduce a JavaScript interpreter.
 
 ## Hermes Agent CLI
 

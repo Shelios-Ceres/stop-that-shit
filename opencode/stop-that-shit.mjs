@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
-import os from 'node:os';
-import path from 'node:path';
+import { directiveErrorText, mentionsDirective, resolveDataDir } from './runtime.mjs';
+import * as Effect from 'effect/Effect';
 
 const require = createRequire(import.meta.url);
 const {
@@ -17,29 +17,6 @@ const { readState, updateSession } = require('../src/state.cjs');
 
 const CONTEXT_PREFIX = 'Stop That Shit context:';
 const MAX_PROCESSED_MESSAGES = 1024;
-
-// Even a quoted mention must suppress implicit host-mode promotion. The core
-// parser alone decides whether the text is a direct contract invocation.
-function mentionsDirective(text) {
-  return /\$stop-that-shit\b/i.test(String(text || ''));
-}
-
-function directiveErrorText(error) {
-  return `Stop That Shit directive rejected (${error.code}): ${error.message} `
-    + 'The previous contract is unchanged. Tools are paused until you submit a corrected instruction.';
-}
-
-function fallbackDataDir() {
-  const root = process.platform === 'win32'
-    ? process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
-    : process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state');
-  return path.join(root, 'opencode', 'stop-that-shit');
-}
-
-function resolveDataDir(options) {
-  if (typeof options.dataDir === 'string' && options.dataDir) return options.dataDir;
-  return fallbackDataDir();
-}
 
 function appendToolContext(output, text) {
   if (!text || !output) return;
@@ -366,4 +343,13 @@ export const StopThatShitPlugin = async ({ client, directory }, options = {}) =>
       appendToolContext(output, pendingEntry && pendingEntry.text);
     }
   };
+};
+
+// Both loaders resolve ./server. Each host selects its own native adapter.
+export default {
+  id: 'stop-that-shit',
+  server: StopThatShitPlugin,
+  // V1 does not need to load the V2 schema and hook implementation.
+  effect: (ctx) => Effect.flatMap(Effect.promise(() => import('./v2.mjs')),
+    ({ openCodeV2Effect }) => openCodeV2Effect(ctx)),
 };

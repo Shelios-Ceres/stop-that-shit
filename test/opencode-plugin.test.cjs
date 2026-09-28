@@ -33,8 +33,17 @@ test('package exposes the OpenCode plugin entrypoint for GitHub installs', async
   assert.ok(packageJson.files.includes('opencode/'));
   assert.ok(packageJson.files.includes('src/'));
   assert.ok(release.include.includes('opencode'));
+  assert.ok(packageJson.files.includes('server.mjs'));
+  assert.ok(release.include.includes('server.mjs'));
+  const localDirectoryModule = await import(pathToFileURL(path.join(root, 'server.mjs')).href);
+  assert.equal(localDirectoryModule.default, module.default);
   assert.equal(typeof module.StopThatShitPlugin, 'function');
-  assert.deepEqual(Object.keys(module), ['StopThatShitPlugin']);
+  assert.deepEqual(Object.keys(module), ['StopThatShitPlugin', 'default']);
+  assert.equal(module.default.server, module.StopThatShitPlugin);
+  assert.equal(typeof module.default.effect, 'function');
+  assert.equal(module.default.id, 'stop-that-shit');
+  assert.equal(packageModule.default, module.default);
+  assert.equal(serverModule.default, module.default);
   assert.equal(packageModule.StopThatShitPlugin, module.StopThatShitPlugin);
   assert.equal(serverModule.StopThatShitPlugin, module.StopThatShitPlugin);
 });

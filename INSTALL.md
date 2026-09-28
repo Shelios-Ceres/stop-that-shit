@@ -1,6 +1,6 @@
 # Install Stop That Shit
 
-These instructions target [`0.2.3`](https://github.com/lennney/stop-that-shit/releases/tag/0.2.3).
+These instructions target [`0.2.4`](https://github.com/lennney/stop-that-shit/releases/tag/0.2.4).
 
 For local checkout validation, use the flow under
 [Local Guard development](#local-guard-development).
@@ -45,7 +45,7 @@ The Guard requires Node.js 18 or newer. Add the repository as a Codex
 marketplace, then install the plugin:
 
 ```powershell
-codex plugin marketplace add lennney/stop-that-shit --ref 0.2.3
+codex plugin marketplace add lennney/stop-that-shit --ref 0.2.4
 codex plugin add stop-that-shit@stop-that-shit
 ```
 
@@ -189,7 +189,7 @@ sessions unless you pass `--run`.
 
 ## OpenCode: install from GitHub
 
-OpenCode 1.18.18 or newer can install this repository directly from GitHub
+OpenCode V1 1.18.18 or newer can install this repository directly from GitHub
 without a checkout or npm publication:
 
 ```bash
@@ -219,14 +219,71 @@ put this entry in your OpenCode configuration:
 }
 ```
 
-OpenCode denies covered actions by throwing before tool execution. `deps=ask`
+OpenCode V1 denies covered actions by throwing before tool execution. `deps=ask`
 and `hash=ask` therefore stop the action and ask you to submit a new explicit
 `allow` contract; they do not open a second interactive permission prompt.
 
-Contract state and runtime metadata are stored below OpenCode's state directory
-in `stop-that-shit/`. OpenCode currently has no external-plugin uninstall
+Contract state and runtime metadata use `stop-that-shit/` below the OpenCode
+state directory on Unix (`XDG_STATE_HOME` or `~/.local/state`) and below
+`LOCALAPPDATA/opencode` on Windows. A plugin `dataDir` option overrides this.
+OpenCode V1 currently has no external-plugin uninstall
 subcommand; remove `github:lennney/stop-that-shit` from the global
 configuration's `plugin` list, then restart OpenCode.
+
+### OpenCode V2
+
+The V2 adapter in this checkout targets OpenCode **2.0.18**. It shares the same
+package and policy core with V1; V1's minimum remains **1.18.18**. V2 support
+starts with release 0.2.4.
+
+For local acceptance, install this checkout's dependencies with
+`npm ci --ignore-scripts`, then configure its **package directory**:
+
+```json
+{
+  "plugins": [
+    { "package": "/absolute/path/to/stop-that-shit" }
+  ]
+}
+```
+
+On Windows, use a path such as `C:/projects/stop-that-shit`. OpenCode 2.0.18
+ignores explicitly configured single-file paths; point at the directory that
+contains `package.json`. A packed local artifact can instead be installed with
+`npm install --ignore-scripts /path/to/stop-that-shit.tgz`; configure the installed
+`node_modules/stop-that-shit` directory. This does not require lifecycle scripts.
+
+The V2 CLI command is
+`opencode plugin add github:lennney/stop-that-shit`. V2 `plugin add` accepts npm
+and Git sources, not local `.tgz` files. Local packed-host acceptance does not
+establish GitHub-source installation; use the directory route for a local checkout.
+
+Restart OpenCode and use the same `$stop-that-shit review` / `change` commands.
+For noninteractive `opencode run`, pass the directive through stdin: these
+tested CLI versions quote positional messages containing spaces, which makes
+the directive quoted text instead of an instruction.
+V2 uses a typed tool error for a Guard denial, allowing the session to continue
+with permitted actions. `deps=ask` and `hash=ask` still require an explicit new
+contract. The optional `/sts` alias above is a V1 configuration example.
+
+V2 reads delivered root-session user messages, ignores synthetic and child
+instructions as authority, and injects context before model requests. Native
+`shell`, `patch`, `write`, `edit`, and `subagent` calls use the shared policy.
+Finite `agents=N` contracts reject `subagent` continuation via `sessionID`;
+start a new child instead. Unknown child outcomes retain reserved capacity.
+Code Mode's direct JavaScript/network effects are not fully covered by tool
+hooks. In review mode its unknown outer `execute` action is denied by the
+existing policy; permitting it in change mode does not establish full coverage.
+
+To remove the V2 plugin, remove its entry from `plugins` and restart. Keep the
+same `dataDir` if one was configured. V2 plugin storage holds processed message
+IDs and pending status/runtime query replies until delivery or session deletion.
+Contract state and runtime evidence retain their existing format.
+
+Maintainers can run the packed-host checks with `STS_OPENCODE_V1_BIN` and
+`STS_OPENCODE_V2_BIN` set to the respective executables:
+`node --test test/opencode-dual-smoke.test.mjs`. The checks use a local model
+stand-in and verify denial, continued reading, and explicit change after restart.
 
 ## Hermes Agent CLI
 
@@ -265,7 +322,7 @@ Add `-l` for a project-scoped installation. The tagged release contains
 the Pi adapter; use this pinned Git ref instead of an unpinned branch:
 
 ```bash
-pi install git:github.com/lennney/stop-that-shit@0.2.3
+pi install git:github.com/lennney/stop-that-shit@0.2.4
 ```
 
 Start a new Pi process, or run `/reload` in the TUI after changing package
@@ -295,7 +352,7 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, ask the built-in Skill Installer to install the shared Skill folder:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.2.3/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/lennney/stop-that-shit/tree/0.2.4/skills/stop-that-shit
 ```
 
 To install only Stop That Shit Slop from the tagged checkout:

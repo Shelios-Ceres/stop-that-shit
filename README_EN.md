@@ -137,7 +137,7 @@ Expand your host. For guidance without runtime enforcement, [install only the Sk
 <details>
 <summary>Claude Code</summary>
 
-Download and extract the [0.2.3 source](https://github.com/lennney/stop-that-shit/archive/refs/tags/0.2.3.zip), then run from the checkout root:
+Download and extract the [0.2.4 source](https://github.com/lennney/stop-that-shit/archive/refs/tags/0.2.4.zip), then run from the checkout root:
 
 ```bash
 claude plugin validate .
@@ -157,7 +157,7 @@ Restart Claude Code or run `/reload-plugins`, then invoke:
 <summary>Codex</summary>
 
 ```bash
-codex plugin marketplace add lennney/stop-that-shit --ref 0.2.3
+codex plugin marketplace add lennney/stop-that-shit --ref 0.2.4
 codex plugin add stop-that-shit@stop-that-shit
 ```
 
