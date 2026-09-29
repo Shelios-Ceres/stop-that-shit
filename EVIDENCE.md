@@ -11,37 +11,179 @@ actions, context responses, and permission denies. It records host effect as
 `unobserved`; a returned permission deny is not evidence that the host skipped
 the action.
 
-Version: 0.2.1-shelios.2 Upstream integration with preserved fork behavior
-Release: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.2
-Upstream baseline: https://github.com/lennney/stop-that-shit/releases/tag/0.2.1
-Previous fork: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.1.0-shelios.3
-Last updated: 2026-09-07
+Version: 0.2.4-shelios.1 Official concurrency and preserved Marketplace
+Release: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.4-shelios.1
+Upstream baseline: https://github.com/lennney/stop-that-shit/releases/tag/0.2.4
+Previous fork: https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.2
+Last updated: 2026-09-29
 
-## Fork integration validation
+The defensible 0.2.4-shelios.1 claim is: this fork integrates upstream's
+concurrency and adapter behavior while preserving its Marketplace and path
+discovery. Legacy fork authorization is migrated without erasing unresolved
+delegation. The checks below distinguish upstream history from fork results.
 
-- 268 runtime/unit/integration tests pass; one optional installed OpenCode
-  smoke is skipped. The 18 executable policy case arms pass.
-- The release allowlist covers 188 files; the generated Hermes runtime and
-  CaseBundle validator are checked against their sources.
-- An isolated Git-backed install upgraded from `0.1.0-shelios.3` to the new
-  integration by removing only the Marketplace registration, adding the new
-  tag, and reinstalling the same plugin ID. The old cache was preserved.
-- A separate Codex profile installs the built package. Host `skills/list`
-  discovers both `stop-that-shit` and `stss`, and `hooks/list` resolves the
-  two unchanged Hook definitions from the versioned `shelios-plugins` cache.
-- Regression coverage preserves `agents=allow`, directive placement,
-  manifest-based eval paths, and default runtime data resolution. Windows UNC
-  paths use case-insensitive matching across the supported adapters.
-- The bundled Python validators require unavailable PyYAML. Actual Codex
-  installation and host discovery were used to validate package loading;
-  this does not claim a pass from those Python validators.
+## Fork validation — 2026-09-29
 
-## Upstream validation record
+- 444 tests passed, zero failed; three optional installed OpenCode host checks
+  were skipped because those executables are not installed on this machine.
+- 18/18 policy case arms passed; schema, generated Hermes runtime, and the
+  206-file release allowlist passed. npm audit reports zero vulnerabilities
+  with and without development dependencies after updating fast-uri to 3.1.8.
+- Codex installed the package in an isolated profile and discovered both Skills
+  and all four Hook definitions without schema errors.
+- Real installed Hook child processes verified the removed allow parameter,
+  default unlimited capacity, zero preservation, finite reservation/release,
+  SessionEnd retention, and mixed-shell denial. These tests inspect Hook replies;
+  they do not claim that a host executed or blocked a tool.
+- Copies of 261 existing session snapshots passed migration checks through the
+  installed Hook entrypoint: effective budgets were retained and unverified
+  legacy history remained marked. Live session files were not modified.
+- Independent migration review found no remaining in-scope blocker.
+- The bundled Python validators need unavailable PyYAML; package discovery was
+  validated through Codex itself. No Python-validator pass is claimed.
 
-The following results were published by upstream for 0.2.1 and earlier
-releases. They are historical evidence, not new live-host runs of this fork.
+## Upstream validation history
 
-This tree is validated with deterministic Hook-schema simulations, real
+The following records are upstream's published validation, not new live-host
+runs or performance measurements of this fork.
+
+## 0.2.4 OpenCode V1/V2 adapter — 2026-09-28
+
+This candidate builds on 0.2.3; the published 0.2.3 release does
+not contain the V2 adapter. One package provides native V1 and V2 entrypoints
+and uses the existing shared policy/controller.
+
+On Windows x64, the actual candidate was packed with `npm pack`, installed
+with lifecycle scripts disabled, and loaded by OpenCode **1.18.18** and
+**2.0.18** in separate disposable workspaces. Both real CLI processes passed:
+
+- explicit `review` denied a native write with `MODE_FORBIDS_MUTATION` returned
+  to the local model stand-in, and the target file remained absent;
+- the same session completed a permitted read after that denial;
+- a fresh CLI process resumed that session, accepted explicit `change`, wrote
+  the expected file, and persisted the updated contract.
+
+The tests use deterministic local model responses and raw stdin directives.
+They verify installed-host behavior on these paths, not model effectiveness.
+The local V2 directory path requires the packaged root `server.mjs` entry.
+GitHub-source installation of this unreleased candidate remains unverified.
+
+Local verification:
+
+- `npm test`: 428 passed, 3 optional host checks skipped, zero failed. Four
+  review regressions cover unrelated-root progress, fresh permissions after
+  waiting, and runtime replies consumed first by tool/child hooks.
+- the separate packed-host invocation enabled both new checks: 2 passed;
+- `npm run eval`: 18/18 paired-case arms passed;
+- `npm run release:check`: passed for 205 allowlisted files;
+- `git diff --check`: passed.
+
+V2 regressions cover native tool inputs, child budget retention/release,
+synthetic and child message exclusion, invalid directives across reload,
+session permission overrides, and nonmonotonic IDs after compaction. Child
+lifecycle and Code Mode were not exercised by the installed-host smoke.
+Direct Code Mode JavaScript/network effects remain outside complete tool-hook
+coverage. Runtime `hostEffect` remains `unobserved`.
+
+The defensible 0.2.4 claim is: the packaged adapters enforce the tested review
+denial and explicit change paths in both pinned OpenCode hosts. Other host
+surfaces and model effectiveness require separate evidence.
+
+### Adapter design and performance review
+
+Root-scoped permits replace the plugin-wide wait queue; a blocked context
+fetch no longer holds up unrelated roots. A deterministic regression holds
+one root's context operation open while another root completes its denial.
+Metadata is refreshed inside the permit so queued hooks use current session
+permissions. Runtime query replies are retained for the root model context,
+including across reload, instead of disappearing when another hook reads them.
+
+V1 defers loading the V2 implementation and schema. A Windows Node.js local
+microbenchmark measured entry import at about 401 ms before and 203 ms after.
+Tool-check median latency varied from 3.4 to 4.7 ms on minimal history and
+6.4 to 7.4 ms with 1,000 synthetic 2 KiB assistant messages (120 iterations
+per case). These runs show reduced entry import cost, not reduced per-tool
+latency or end-to-end model latency. Context is still fetched before actions
+so newly delivered authority is not hidden by a cache.
+
+## 0.2.3 release candidate
+
+The candidate includes merged fixes #51–#55, scanner-report retention #56,
+and case documentation #59. At the candidate revision:
+
+- `npm test`: 417 passed, 1 skipped, 0 failed;
+- `npm run eval`: 18/18 paired-case arms passed;
+- `npm run hermes:check` and `npm run release:check`: passed; the latter checked
+  199 allowlisted files;
+- stale `--ref 0.2.2` and a stale `0.2.2` tagged archive link were each
+  deliberately inserted in a current README and rejected by `release:check`;
+- `npm run release:build` produced 199 allowlisted files, with no private
+  `AGENTS.md`, environment files, dependencies, or temporary paths;
+- direct invocation of the packaged Codex Hook with isolated state matched the
+  packaged manifest, denied a mixed read/write shell command in review,
+  allowed it under explicit change authority, and denied a namespaced spawn
+  under `agents=0`.
+- in an isolated authenticated Codex CLI 0.153.4 configuration, the candidate
+  package installed as plugin version `0.2.3`. The CLI TUI listed all four
+  packaged Hook events as active after review and trust. In a disposable Git
+  workspace, a `review` task attempting `Get-Content README.md; Set-Content
+  -LiteralPath denied.txt -Value denied` reported `MODE_FORBIDS_MUTATION`,
+  produced no command-execution event, and left `denied.txt` absent. A `change`
+  task ran the same read/write command shape, exited `0`, and wrote the expected
+  content to `allowed.txt`.
+
+The installed-host smoke covers those Codex CLI paths. Release tag, attachment,
+CI, and scan results still need checking against the exact release revision.
+These results do not establish general model improvement or the final effect in
+every host. Runtime `hostEffect` remains `unobserved`.
+
+The defensible 0.2.3 claim is: the current source and packaged adapters apply
+the stated decisions on the tested paths, and one isolated Codex CLI run showed
+the reviewed denial and authorized write. Other host paths and broad model-task
+outcomes need separate observation.
+
+## 0.2.2 validation
+
+This version includes the merged lifecycle and Skill updates, plus the
+directive-entry and host error-handling fixes. The maintainer reported
+completing 0.2.2 installation acceptance before release. This report does not
+include a new recorded live-host run or paid-model comparison for 0.2.2.
+Earlier host results below remain historical evidence.
+Host effect remains `unobserved`.
+
+Local checks on Windows with Node.js 24.14.1:
+
+- `npm test`: 387 passed, zero failed; one optional installed OpenCode smoke
+  was skipped because its host probe was unavailable (388 tests total);
+- `npm run eval`: all 18 executable Bad/Good policy case arms passed;
+- `npm run release:check`: passed for version 0.2.2 and 197 allowlisted files;
+- `npm run hermes:check`: the rebuilt runtime matched the shared source;
+- the shared Skill validator and `git diff --check` passed.
+- all 93 relative links and heading references across 14 release documents
+  resolved locally. Release and package tests check all README language files
+  and the legacy Chinese entry.
+
+The new regressions cover direct versus quoted authorization, newline and
+multipart boundaries, conflicting fields, Claude slash normalization,
+OpenCode implicit promotion, and quoted runtime labels. They also cover
+natural-language corrections around examples, the Codex README-edit path,
+OpenCode input rejection across reload and child calls, Pi input handling when
+notifications fail, and Hermes error recovery through the bundled entrypoint.
+Existing direct change
+and required-checksum paths still return allow. These are deterministic
+parser and adapter results, not proof of real-host prevention or model benefit.
+
+The lockfile updates Ajv's development dependency `fast-uri` from 3.1.5 to
+3.1.6, the patched version identified in the
+[upstream advisory](https://github.com/advisories/GHSA-5jgf-p345-68v8).
+Ajv and the other dependency versions are unchanged. After a clean install,
+`npm audit` reports zero vulnerabilities, including development dependencies;
+`npm audit --omit=dev` also reports zero vulnerabilities.
+
+## Previous 0.2.1 validation
+
+The following report was recorded for 0.2.1 on 2026-09-03.
+That tree was validated with deterministic Hook-schema simulations, real
 child-process stdin/stdout entrypoint tests, cross-platform path regression
 tests, and shared policy tests:
 
@@ -54,7 +196,8 @@ tests, and shared policy tests:
 - Claude review-mode denial, namespaced slash-command arming, POSIX/Windows path
   normalization and Windows case matching, `NotebookEdit`, `PowerShell`, `Monitor`,
   `EnterWorktree`, and `Workflow` fan-out handling have dedicated regressions;
-- two independent Claude Hook processes cannot oversubscribe `agents=1`;
+- two independent Claude Hook processes cannot oversubscribe a configured
+  `agents=1` reservation;
 - all checked-in `.cjs` files pass `node --check`, all JSON files parse, and the
   release allowlist passes with 188 files;
 - the generated CaseBundle validator matches the checked-in schema, including
@@ -119,11 +262,12 @@ Verified locally:
   policy case arms, the 101-file release allowlist, and an installed-cache Hook
   smoke before publication.
 
-The current runtime stores active contract state plus metadata-only decision
-events and independent annotations. It does not store prompts, tool inputs,
+At that preview revision, the runtime stored active contract state plus
+metadata-only decision events and independent annotations. It did not store
+prompts, tool inputs,
 commands, path text, code, diffs, outputs, model responses, or raw session IDs.
-It registers two Hook events: `UserPromptSubmit` and `PreToolUse`. It no longer
-performs action fingerprinting, compaction checkpointing, automatic scope
+It registered two Hook events: `UserPromptSubmit` and `PreToolUse`. It no longer
+performed action fingerprinting, compaction checkpointing, automatic scope
 discovery, or semantic compatibility/new-file guessing.
 
 ## Exact two-Hook candidate smoke
@@ -294,15 +438,14 @@ leading synthetic fixtures.
 Do not claim that Stop That Shit solves overengineering across coding agents or
 publish an improvement percentage from unit tests or this single scenario.
 
-The defensible 0.2.1-shelios.2 claim is:
+The defensible 0.2.2 claim is:
 
 > In Codex, Claude Code, OpenCode, Hermes Agent CLI, and Pi, Stop That Shit provides
 > a short on-demand decision ladder and enforces a few explicit task-authority
 > rules on covered host action paths. Stop That Shit Slop adds an optional,
 > standalone Skill for reducing defensive wording when a sentence has no decision
 > consumer, with twelve fixed offline responses used for regression acceptance.
-> Hermes 0.2.1 coverage is limited to the
-> native Plugin callbacks `pre_llm_call` and `pre_tool_call`; Gateway support
+> Hermes coverage is limited to its native Plugin callbacks; Gateway support
 > refers to the restart lifecycle after plugin changes, not coverage of every
 > Hermes surface. It may reduce some forms of execution drift, but it does not
 > guarantee an effect on stochastic model behavior.

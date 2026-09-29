@@ -28,8 +28,7 @@ function facts(overrides = {}) {
     contract: {
       mode: 'review',
       level: 'guard',
-      agentBudget: 0,
-      agentsUsed: 0,
+      agentBudget: 2,
       hashPolicy: 'deny',
       dependencyPolicy: 'ask',
       allowedPaths: ['private/project/secret.cjs']
@@ -75,6 +74,17 @@ test('runtime audit appends metadata-only decisions with stable outcome dimensio
   }
 });
 
+test('runtime audit stores only a fixed analysis code and drops free-form metadata', (t) => {
+  const directory = dataDir(t);
+  const values = ['shell_execution_option', 'PRIVATE_COMMAND', 'toString', ['shell_execution_option'], { toString: () => 'shell_execution_option', untrustedInput: 'PRIVATE_CODE' }];
+  for (const analysisReason of values) {
+    recordDecision(facts({ action: { ...facts().action, analysisReason } }), { dataDir: directory });
+  }
+  const runtime = readRuntime({ sessionId: 'private-session-id' }, { dataDir: directory });
+  assert.deepEqual(runtime.events.map(event => event.action.analysisReason), ['shell_execution_option', undefined, undefined, undefined, undefined]);
+  assert.doesNotMatch(JSON.stringify(runtime), /PRIVATE_COMMAND|PRIVATE_CODE/);
+});
+
 test('runtime audit records delegation count without task input', (t) => {
   const directory = dataDir(t);
   recordDecision(facts({
@@ -83,17 +93,26 @@ test('runtime audit records delegation count without task input', (t) => {
       mutability: 'delegate',
       delegationCount: 2,
       input: { tasks: [{ goal: 'PRIVATE_DELEGATION_GOAL' }] }
+    },
+    delegation: {
+      reservations: { 'reservation:private': { actionId: 'private', pendingCount: 1, agentIds: ['private-agent'] } }
     }
   }), { dataDir: directory });
   const runtime = readRuntime({ sessionId: 'private-session-id' }, { dataDir: directory });
   assert.equal(runtime.events[0].action.delegationCount, 2);
+  assert.equal(runtime.events[0].contract.agentBudget, 2);
+  assert.equal(runtime.events[0].contract.reservedUpperBound, 2);
+  assert.equal('totalAgentBudget' in runtime.events[0].contract, false);
+  assert.equal('concurrentAgentBudget' in runtime.events[0].contract, false);
+  assert.equal('totalAgentsUsed' in runtime.events[0].contract, false);
   assert.equal(JSON.stringify(runtime).includes('PRIVATE_DELEGATION_GOAL'), false);
 });
 
-test('runtime audit records the explicit agent policy', (t) => {
+test('runtime audit records the default limit without legacy policy fields', (t) => {
   const directory = dataDir(t);
-  const event = recordDecision(facts({ contract: { ...facts().contract, mode: 'change', agentPolicy: 'allow' } }), { dataDir: directory });
-  assert.equal(event.contract.agentPolicy, 'allow');
+  const event = recordDecision(facts({ contract: { ...facts().contract, mode: 'change', agentBudget: Number.MAX_SAFE_INTEGER } }), { dataDir: directory });
+  assert.equal(event.contract.agentBudget, Number.MAX_SAFE_INTEGER);
+  assert.equal('agentPolicy' in event.contract, false);
 });
 
 test('runtime reader tolerates a damaged final JSONL record', (t) => {

@@ -681,7 +681,9 @@ test('paired eval rejects stale Hook trust paths and accepts current enabled hoo
   fs.writeFileSync(path.join(pluginCache, 'hooks', 'codex-hooks.json'), JSON.stringify({
     hooks: {
       UserPromptSubmit: [{ hooks: [{ type: 'command', command: 'node prompt.cjs' }] }],
-      PreToolUse: [{ hooks: [{ type: 'command', command: 'node tool.cjs' }] }]
+      PreToolUse: [{ hooks: [{ type: 'command', command: 'node tool.cjs' }] }],
+      PostToolUse: [{ hooks: [{ type: 'command', command: 'node result.cjs' }] }],
+      SessionEnd: [{ hooks: [{ type: 'command', command: 'node end.cjs' }] }]
     }
   }));
   const hash = `sha256:${'a'.repeat(64)}`;
@@ -694,7 +696,7 @@ test('paired eval rejects stale Hook trust paths and accepts current enabled hoo
   ].join('\n'));
   assert.throws(
     () => assertInstalledHooksTrusted(codexHome, pluginCache),
-    /trust entry was not observed or is disabled: UserPromptSubmit, PreToolUse/
+    /trust entry was not observed or is disabled: UserPromptSubmit, PreToolUse, PostToolUse, SessionEnd/
   );
 
   fs.writeFileSync(path.join(codexHome, 'config.toml'), [
@@ -706,14 +708,28 @@ test('paired eval rejects stale Hook trust paths and accepts current enabled hoo
     'enabled = true',
     ''
   ].join('\n'));
+  assert.throws(
+    () => assertInstalledHooksTrusted(codexHome, pluginCache),
+    /trust entry was not observed or is disabled: PostToolUse, SessionEnd/
+  );
+  fs.appendFileSync(path.join(codexHome, 'config.toml'), [
+    `[hooks.state."${hookPrefix}post_tool_use:0:0"]`,
+    `trusted_hash = "${hash}"`,
+    'enabled = true',
+    '',
+    `[hooks.state."${hookPrefix}session_end:0:0"]`,
+    `trusted_hash = "${hash}"`,
+    'enabled = true',
+    ''
+  ].join('\n'));
   const states = assertInstalledHooksTrusted(codexHome, pluginCache);
-  assert.equal(states.length, 2);
+  assert.equal(states.length, 4);
   assert.equal(states.every((state) => state.trustedEntryObserved && state.enabled), true);
 
   fs.appendFileSync(path.join(codexHome, 'config.toml'), 'enabled = false\n');
   assert.throws(
     () => assertInstalledHooksTrusted(codexHome, pluginCache),
-    /trust entry was not observed or is disabled: PreToolUse/
+    /trust entry was not observed or is disabled: SessionEnd/
   );
 });
 
@@ -1099,8 +1115,7 @@ test('offline rescore recomputes a path-bound host smoke from archived runtime e
     contract: {
       mode: 'review',
       level: 'guard',
-      agentBudget: 0,
-      agentsUsed: 0,
+      agentBudget: Number.MAX_SAFE_INTEGER,
       hashPolicy: 'deny',
       dependencyPolicy: 'ask',
       allowedPaths: []

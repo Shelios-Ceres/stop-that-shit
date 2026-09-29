@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const {
+  analyzeShell,
   classifyCodexTool,
   classifyShell,
   detectDependencyIntent: detectCodexDependencyIntent,
@@ -46,7 +47,7 @@ function classifyOpenCodeTool(toolName, args) {
   return classifyCodexTool(toolName, args);
 }
 
-function extractAffectedPaths(toolName, args, cwd) {
+function extractAffectedPaths(toolName, args, cwd, mutability) {
   const name = String(toolName || '').toLowerCase();
   if (name === 'edit' || name === 'write') {
     const file = normalizePath(args && args.filePath, cwd);
@@ -63,7 +64,7 @@ function extractAffectedPaths(toolName, args, cwd) {
     return [...new Set(files.filter(Boolean))];
   }
 
-  if (classifyOpenCodeTool(toolName, args) === 'write') {
+  if ((mutability ?? classifyOpenCodeTool(toolName, args)) === 'write') {
     const file = normalizePath(args && (args.filePath || args.file_path || args.path), cwd);
     return file ? [file] : [];
   }
@@ -109,7 +110,19 @@ function detectHashIntent(toolName, args) {
   return false;
 }
 
+function analyzeOpenCodeTool(toolName, args, cwd) {
+  const analysis = String(toolName || '').toLowerCase() === 'bash'
+    ? analyzeShell(args && args.command)
+    : {
+      mutability: classifyOpenCodeTool(toolName, args),
+      hashIntent: detectHashIntent(toolName, args),
+      dependencyIntent: detectDependencyIntent(toolName, args)
+    };
+  return { ...analysis, affectedPaths: extractAffectedPaths(toolName, args, cwd, analysis.mutability) };
+}
+
 module.exports = {
+  analyzeOpenCodeTool,
   classifyOpenCodeTool,
   detectDependencyIntent,
   detectHashIntent,

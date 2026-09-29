@@ -54,7 +54,7 @@ general improvement in model behavior.
    Then run these commands one at a time:
 
    ```powershell
-   codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.2
+   codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.4-shelios.1
    codex plugin add stop-that-shit@shelios-plugins
    ```
 
@@ -62,16 +62,13 @@ general improvement in model behavior.
 5. Ask the user to open a fresh Codex CLI TUI and enter `/hooks`.
 6. Stop and let the user inspect and trust the Hook commands.
 
-A correct Guard installation has these two active events:
-
-```text
-UserPromptSubmit  Installed 1  Active 1
-PreToolUse        Installed 1  Active 1
-```
-
-The other events, including `Stop`, should show zero installed Hooks. An update
-can require another review because Codex records trust for the Hook definition.
-Do not disable or work around this review.
+Compare the installed tag's `hooks/codex-hooks.json` with the entries shown by
+`/hooks`, then let the user review and trust those commands. Other plugins can
+add entries. Subagent events from older configurations remain ignored and do
+not prove delegation completion or release capacity.
+An update can require another review because Codex records trust for the Hook
+definition. Do not disable or work around this review. See
+[upgrade notes](INSTALL.md#upgrade) for version and state migration.
 
 ## Hermes Agent CLI
 
@@ -138,10 +135,10 @@ general improvement in model behavior.
 If the user does not want Hooks, install the advisory Skill instead:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.1-shelios.2/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.4-shelios.1/skills/stop-that-shit
 ```
 
-If the user asks for only Stop That Shit Slop, run this from a `0.2.1-shelios.2` checkout:
+If the user asks for only Stop That Shit Slop, run this from the tagged checkout:
 
 ```bash
 npx skills add ./skills/stss --global

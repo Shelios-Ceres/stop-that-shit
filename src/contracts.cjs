@@ -4,14 +4,13 @@ const MODES = new Set(['answer', 'review', 'change', 'monitor', 'open']);
 const LEVELS = new Set(['watch', 'guard', 'lock', 'off']);
 const HASH_POLICIES = new Set(['deny', 'ask', 'allow']);
 const SCOPE_POLICIES = new Set(['deny', 'ask', 'allow']);
+const DEFAULT_AGENT_LIMIT = Number.MAX_SAFE_INTEGER;
 
 function defaultContract() {
   return {
     mode: 'unconfirmed',
     level: 'watch',
-    agentPolicy: 'finite',
-    agentBudget: 0,
-    agentsUsed: 0,
+    agentBudget: DEFAULT_AGENT_LIMIT,
     hashPolicy: 'deny',
     allowedPaths: null,
     dependencyPolicy: 'ask',
@@ -20,45 +19,135 @@ function defaultContract() {
 }
 
 function directiveHead(prompt, matchEnd) {
-  const tail = prompt.slice(matchEnd).trimStart();
+  const tail = prompt.slice(matchEnd).replace(/^[ \t]+/, '');
   const boundaries = [tail.indexOf('--'), tail.search(/:(?=\s|$)/), tail.indexOf('\n')]
     .filter((index) => index >= 0);
-  const end = boundaries.length ? Math.min(...boundaries) : Math.min(tail.length, 80);
+  const end = boundaries.length ? Math.min(...boundaries) : tail.length;
   return tail.slice(0, end).trim();
 }
 
 function parseDirective(prompt) {
-  const firstContentLine = String(prompt || '').split(/\r?\n/).find((line) => line.trim()) || '';
-  const mention = /^\s*\$stop-that-shit\b/i.exec(firstContentLine);
+  // A directive starts the first non-empty line, outside quoted/code content.
+  // Four spaces or a tab denote an indented code example, not an invocation.
+  const mention = /^(?:[ \t]*\r?\n)* {0,3}\$stop-that-shit(?=$|[\s,:])/i.exec(prompt);
   if (!mention) return null;
 
-  const head = directiveHead(firstContentLine, mention.index + mention[0].length);
+  const head = directiveHead(prompt, mention.index + mention[0].length);
   const tokens = head.split(/[\s,]+/).map((token) => token.trim()).filter(Boolean);
-  const parsed = { mentioned: true };
+  const parsed = { mentioned: true, error: null, warning: null };
+
+  function setField(field, value, token) {
+    if (Object.hasOwn(parsed, field) && JSON.stringify(parsed[field]) !== JSON.stringify(value)) {
+      parsed.error = {
+        code: 'CONFLICTING_DIRECTIVE', token,
+        message: `Conflicting values for ${field}. Submit one value per directive field.`
+      };
+    } else {
+      parsed[field] = value;
+    }
+  }
 
   for (const rawToken of tokens) {
+    if (parsed.error) break;
     const token = rawToken.toLowerCase();
-    if (MODES.has(token)) parsed.mode = token;
-    if (LEVELS.has(token)) parsed.level = token;
-    const agents = /^agents=(\d+)$/.exec(token);
-    if (agents) {
-      parsed.agentPolicy = 'finite';
-      parsed.agentBudget = Math.min(Number(agents[1]), 8);
+    if (MODES.has(token)) {
+      setField('mode', token, rawToken);
+      continue;
     }
-    if (token === 'agents=allow') parsed.agentPolicy = 'allow';
+    if (LEVELS.has(token)) {
+      setField('level', token, rawToken);
+      continue;
+    }
+    const agents = /^agents=(.*)$/i.exec(rawToken);
+    if (agents) {
+      const value = parseAgentLimit(agents[1]);
+      if (value === null) {
+        parsed.error = invalidAgentLimit(rawToken);
+        break;
+      }
+      setField('agentBudget', value, rawToken);
+      continue;
+    }
+    if (/^agents$/i.test(rawToken)) {
+      parsed.error = {
+        code: 'INVALID_AGENT_LIMIT',
+        token: rawToken,
+        message: `${rawToken} must be a non-negative safe integer.`
+      };
+      break;
+    }
+    if (/^(?:total-agents|concurrent-agents)(?:=|$)/i.test(rawToken)) {
+      parsed.error = {
+        code: 'UNSUPPORTED_AGENT_DIRECTIVE',
+        token: rawToken,
+        message: 'Use agents=N to set the maximum number of concurrently active subagents.'
+      };
+      break;
+    }
     const hash = /^hash=(deny|ask|allow)$/.exec(token);
-    if (hash && HASH_POLICIES.has(hash[1])) parsed.hashPolicy = hash[1];
+    if (hash && HASH_POLICIES.has(hash[1])) {
+      setField('hashPolicy', hash[1], rawToken);
+      continue;
+    }
     const files = /^files=(.*)$/i.exec(rawToken);
-    if (files) parsed.allowedPaths = files[1].split('|').map((value) => value.replace(/\\/g, '/')).filter(Boolean);
+    if (files) {
+      setField('allowedPaths', files[1].split('|').map((value) => value.replace(/\\/g, '/')).filter(Boolean), rawToken);
+      continue;
+    }
     const dependencies = /^deps=(deny|ask|allow)$/.exec(token);
-    if (dependencies && SCOPE_POLICIES.has(dependencies[1])) parsed.dependencyPolicy = dependencies[1];
+    if (dependencies && SCOPE_POLICIES.has(dependencies[1])) {
+      setField('dependencyPolicy', dependencies[1], rawToken);
+      continue;
+    }
+    parsed.error = {
+      code: 'INVALID_DIRECTIVE_TOKEN', token: rawToken,
+      message: 'Unknown directive field. Put task text after -- or on the next line.'
+    };
   }
 
   return parsed;
 }
 
+function parseAgentLimit(value) {
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function invalidAgentLimit(token) {
+  return {
+    code: 'INVALID_AGENT_LIMIT',
+    token,
+    message: `${token} must be a non-negative safe integer.`
+  };
+}
+
+function correctionProse(prompt) {
+  let fence = null;
+  // Keep a separator: removing an example must not join words into a new
+  // instruction, or expose a quoted "fix" as the start of the user's prompt.
+  const omitted = '\uFFFC';
+  return prompt.split(/\r?\n/).map((line) => {
+    if (fence) {
+      const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+      if (close && close[1][0] === fence[0] && close[1].length >= fence.length) fence = null;
+      return omitted;
+    }
+    if (/^(?: {0,3}>| {4}|\t)/.test(line)) return omitted;
+    const open = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (open && (open[1][0] !== '`' || !line.slice(open[0].length).includes('`'))) {
+      fence = open[1];
+      return omitted;
+    }
+    return line;
+  }).join('\n')
+    .replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, omitted)
+    .replace(/"(?:\\.|[^"\\])*"|(?<![\p{L}\p{N}\\])'[\s\S]*?(?<!\\)'(?![\p{L}\p{N}])|“[^”]*”|‘[^’]*’|「[^」]*」|『[^』]*』/gu, omitted)
+    .trim();
+}
+
 function naturalCorrection(prompt, previous) {
-  const text = prompt.trim();
+  const text = correctionProse(prompt);
 
   if (/^(?:stop|stop now|停止|停下来)[.!。！\s]*$/i.test(text)) {
     return { mode: 'answer', source: 'explicit-stop' };
@@ -82,17 +171,51 @@ function naturalCorrection(prompt, previous) {
   return null;
 }
 
+function validAgentBudget(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function normalizeContract(previousContract) {
+  const supplied = previousContract && typeof previousContract === 'object' ? previousContract : {};
+  const previous = { ...defaultContract(), ...supplied };
+  // The pre-lifecycle fork stored allow with a numeric placeholder of zero.
+  const suppliedAgentBudget = supplied.agentPolicy === 'allow'
+    ? DEFAULT_AGENT_LIMIT : validAgentBudget(supplied.agentBudget);
+  const concurrentAgentBudget = validAgentBudget(supplied.concurrentAgentBudget);
+  const totalAgentBudget = validAgentBudget(supplied.totalAgentBudget);
+  previous.agentBudget = suppliedAgentBudget
+    ?? (concurrentAgentBudget !== null && concurrentAgentBudget !== DEFAULT_AGENT_LIMIT
+      ? concurrentAgentBudget
+      : totalAgentBudget !== null && totalAgentBudget !== DEFAULT_AGENT_LIMIT
+        ? totalAgentBudget
+        : DEFAULT_AGENT_LIMIT);
+  delete previous.totalAgentBudget;
+  delete previous.concurrentAgentBudget;
+  delete previous.agentsUsed;
+  delete previous.agentPolicy;
+  return previous;
+}
+
 function parseContractPrompt(prompt, previousContract = defaultContract()) {
-  const previous = { ...defaultContract(), ...previousContract };
+  const previous = normalizeContract(previousContract);
   const directive = parseDirective(String(prompt || ''));
   const correction = naturalCorrection(String(prompt || ''), previous);
   const next = { ...previous };
   let changed = false;
 
   if (directive) {
+    if (directive.error) {
+      return {
+        contract: previous,
+        changed: false,
+        directive: true,
+        correction: Boolean(correction),
+        warning: null,
+        error: directive.error
+      };
+    }
     if (directive.mode && directive.mode !== next.mode) {
       next.mode = directive.mode;
-      next.agentsUsed = 0;
       changed = true;
     }
     if (directive.level && directive.level !== next.level) {
@@ -101,12 +224,6 @@ function parseContractPrompt(prompt, previousContract = defaultContract()) {
     }
     if (Number.isInteger(directive.agentBudget) && directive.agentBudget !== next.agentBudget) {
       next.agentBudget = directive.agentBudget;
-      next.agentsUsed = 0;
-      changed = true;
-    }
-    if (directive.agentPolicy && directive.agentPolicy !== next.agentPolicy) {
-      next.agentPolicy = directive.agentPolicy;
-      next.agentsUsed = 0;
       changed = true;
     }
     if (directive.hashPolicy && directive.hashPolicy !== next.hashPolicy) {
@@ -132,7 +249,6 @@ function parseContractPrompt(prompt, previousContract = defaultContract()) {
   } else if (correction) {
     if (correction.mode !== next.mode) {
       next.mode = correction.mode;
-      next.agentsUsed = 0;
       changed = true;
     }
     if (next.level === 'watch') {
@@ -146,7 +262,14 @@ function parseContractPrompt(prompt, previousContract = defaultContract()) {
     next.level = 'watch';
   }
 
-  return { contract: next, changed, directive: Boolean(directive), correction: Boolean(correction) };
+  return {
+    contract: next,
+    changed,
+    directive: Boolean(directive),
+    correction: Boolean(correction),
+    warning: directive && directive.warning ? directive.warning : null,
+    error: null
+  };
 }
 
 module.exports = {
@@ -154,6 +277,7 @@ module.exports = {
   SCOPE_POLICIES,
   LEVELS,
   MODES,
+  DEFAULT_AGENT_LIMIT,
   defaultContract,
   parseContractPrompt
 };

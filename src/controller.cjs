@@ -1,11 +1,12 @@
 'use strict';
 
-const { parseContractPrompt } = require('./contracts.cjs');
-const { assertControlEvent } = require('./control-protocol.cjs');
+const { DEFAULT_AGENT_LIMIT, parseContractPrompt } = require('./contracts.cjs');
+const { SHELL_ANALYSIS_REASONS, isShellAnalysisReason, assertControlEvent, supportsLifecycleFacts } = require('./control-protocol.cjs');
+const { inspectDelegation, applyDelegationFact } = require('./delegation-state.cjs');
 const { decide } = require('./decision.cjs');
 const { readRuntime, recordDecision } = require('./runtime-audit.cjs');
 const { recordAnnotation } = require('./runtime-annotations.cjs');
-const { readState, withSessionLock, writeState } = require('./state.cjs');
+const { readState, updateSession } = require('./state.cjs');
 
 function none() {
   return { kind: 'none' };
@@ -15,25 +16,38 @@ function context(text) {
   return { kind: 'context', text };
 }
 
-function contractContext(contract, phase = 'active') {
+function contractContext(contract, delegation = {}, phase = 'active', directiveWarning = null) {
+  if (typeof delegation === 'string') {
+    phase = delegation;
+    delegation = {};
+  }
   if (contract.level === 'off') {
-    return 'Stop That Shit is disabled for this session. No plugin decision is being enforced.';
+    return [
+      directiveWarning && directiveWarning.message ? `Warning: ${directiveWarning.message}` : null,
+      'Stop That Shit is disabled for this session. No plugin decision is being enforced.'
+    ].filter(Boolean).join(' ');
   }
   if (contract.mode === 'unconfirmed') {
     return [
+      directiveWarning && directiveWarning.message ? `Warning: ${directiveWarning.message}` : null,
       'Stop That Shit is in watch-only mode because no task mode is confirmed.',
       'Use $stop-that-shit review for read-only work, or change for implementation. The default fast path relies on the Stop Ladder and does not claim a full machine contract.',
       'Do not claim that mutations are being blocked until a mode is confirmed.'
-    ].join(' ');
+    ].filter(Boolean).join(' ');
   }
 
+  const agentLimit = Number.isSafeInteger(contract.agentBudget) && contract.agentBudget >= 0
+    ? contract.agentBudget
+    : DEFAULT_AGENT_LIMIT;
+
   return [
-    `Stop That Shit (${phase}): mode=${contract.mode}; agents=${contract.agentPolicy === 'allow' ? 'allow' : `${contract.agentsUsed}/${contract.agentBudget}`}; hash=${contract.hashPolicy || 'deny'}; deps=${contract.dependencyPolicy || 'ask'}; files=${Array.isArray(contract.allowedPaths) ? contract.allowedPaths.join('|') : 'unbounded'}.`,
+    directiveWarning && directiveWarning.message ? `Warning: ${directiveWarning.message}` : null,
+    `Stop That Shit (${phase}): mode=${contract.mode}; agents=${inspectDelegation(delegation).reservedUpperBound}/${agentLimit} reserved${inspectDelegation(delegation).unresolvedReasons.length ? "; count unproven" : ""}; hash=${contract.hashPolicy || 'deny'}; deps=${contract.dependencyPolicy || 'ask'}; files=${Array.isArray(contract.allowedPaths) ? contract.allowedPaths.join('|') : 'unbounded'}.`,
     'Stop Ladder: Is it requested? Is it necessary? What reachable evidence proves that? Would omission fail the current acceptance?',
     'Report real findings even when implementation is not authorized.',
     'Before expanding scope, name reachable evidence, failure if omitted, and the fact that changes the next action.',
     'Harness interception coverage is a guardrail, not a security boundary.'
-  ].join(' ');
+  ].filter(Boolean).join(' ');
 }
 
 const FAMILY_NAMES = { I: 'INTENT', H: 'HASH', S: 'SCOPE', T: 'THRASH' };
@@ -43,7 +57,7 @@ function activeControlState(contract) {
   return contract.level === 'watch' ? 'OBSERVING' : 'ARMED';
 }
 
-function decisionMessage(result, contract, event, responseOutcome) {
+function decisionMessage(result, contract, event, responseOutcome, analysisReason) {
   const observing = responseOutcome === 'context_returned';
   const executionDenial = responseOutcome === 'execution_denial_returned';
   const lines = [
@@ -52,6 +66,8 @@ function decisionMessage(result, contract, event, responseOutcome) {
       ? 'Guard returned context; it did not deny the action.'
       : executionDenial ? 'Guard returned a pre-execution denial.' : 'Guard returned permission deny.',
     `Reason: ${result.reasonCode}`,
+    ...(isShellAnalysisReason(analysisReason) && ['MODE_FORBIDS_MUTATION', 'MUTABILITY_UNPROVEN'].includes(result.reasonCode)
+      ? [`Detail: ${result.explanation}`] : []),
     `Code: ${result.family}/${result.reasonCode}`,
     `State: ${activeControlState(contract)} / ${contract.mode}`
   ];
@@ -61,7 +77,7 @@ function decisionMessage(result, contract, event, responseOutcome) {
 }
 
 function runtimeCommand(prompt) {
-  const match = /^\s*\$stop-that-shit\s+(status|runtime(?:\s+all)?|explain\s+(evt_[0-9a-f-]+)|label\s+(evt_[0-9a-f-]+)\s+(correct|incorrect|inconclusive))\s*$/i.exec(prompt);
+  const match = /^(?:[ \t]*\r?\n)* {0,3}\$stop-that-shit[ \t]+(status|runtime(?:[ \t]+all)?|explain[ \t]+(evt_[0-9a-f-]+)|label[ \t]+(evt_[0-9a-f-]+)[ \t]+(correct|incorrect|inconclusive))[ \t]*(?:\r?\n[ \t]*)*$/i.exec(prompt);
   if (!match) return null;
   const words = match[1].toLowerCase().split(/\s+/);
   return { name: words[0], all: words[1] === 'all', eventId: match[2] || match[3] || null, label: match[4] || null };
@@ -91,7 +107,7 @@ function handleRuntimeCommand(command, event, state, options) {
     return context([
       'Stop That Shit status',
       `State: ${activeControlState(state.contract)} / ${state.contract.mode}`,
-      `Agent policy: ${state.contract.agentPolicy === 'allow' ? 'allow' : `finite (${state.contract.agentsUsed}/${state.contract.agentBudget})`}`,
+      `Agents: ${inspectDelegation(state.delegation).reservedUpperBound}/${state.contract.agentBudget} reserved${inspectDelegation(state.delegation).unresolvedReasons.length ? '; count unproven' : ''}`,
       'Host effect: unobserved',
       'Use runtime for checked-action and Guard-response counts.'
     ].join('\n'));
@@ -112,8 +128,10 @@ function handleRuntimeCommand(command, event, state, options) {
   return context([
     `Stop That Shit event ${found.eventId}`,
     `State: ${found.controlState.toUpperCase()} / ${found.contract.mode}`,
-    `Agent policy: ${found.contract.agentPolicy === 'allow' ? 'allow' : `finite (${found.contract.agentsUsed}/${found.contract.agentBudget})`}`,
+    `Agent limit: ${found.contract.agentBudget}`,
     `Action: ${found.action.toolName} (${found.action.mutability}); paths=${found.action.pathCount}`,
+    ...(isShellAnalysisReason(found.action.analysisReason)
+      ? [`Analysis: ${SHELL_ANALYSIS_REASONS[found.action.analysisReason]}`] : []),
     `Decision: ${found.decision.policyOutcome} / ${found.decision.reasonCode}`,
     `Response: ${found.decision.responseOutcome}`,
     `Host effect: ${found.decision.hostEffect}`,
@@ -121,27 +139,38 @@ function handleRuntimeCommand(command, event, state, options) {
   ].join('\n'));
 }
 
-function handlePrompt(event, options) {
-  const state = readState(event.sessionId, options.dataDir);
+function handlePrompt(event, state, options) {
   const command = runtimeCommand(event.prompt);
   if (command) return handleRuntimeCommand(command, event, state, options);
   const parsed = parseContractPrompt(event.prompt, state.contract);
+  if (parsed.error) {
+    state.directiveError = parsed.error;
+    state.directiveWarning = null;
+    state.lastPromptContext = null;
+    return { kind: 'prompt-error', error: parsed.error, message: parsed.error.message };
+  }
   state.contract = parsed.contract;
-  const promptContext = contractContext(state.contract);
+  if (parsed.directive || parsed.correction) state.directiveError = null;
+  if (parsed.directive || parsed.correction) state.directiveWarning = parsed.warning;
+  const promptContext = contractContext(state.contract, state.delegation, 'active', state.directiveWarning);
   const repeatedContext = state.lastPromptContext === promptContext;
   state.lastPromptContext = promptContext;
-  writeState(event.sessionId, state, options.dataDir);
   return repeatedContext ? none() : context(promptContext);
 }
 
 function handleBeforeAction(event, options) {
-  const evaluate = () => {
-    const state = readState(event.sessionId, options.dataDir);
-    const delegationCount = event.action.mutability === 'delegate'
-      ? (Number.isInteger(event.action.delegationCount) ? event.action.delegationCount : 1)
-      : 0;
+  const legacyDelegationProtocol = !supportsLifecycleFacts(event)
+    && ['delegate', 'control', 'unknown'].includes(event.action.mutability);
+  const changesDelegation = event.action.mutability === 'delegate'
+    || event.action.delegationLifecycleUnproven || legacyDelegationProtocol;
+  const delegationCount = event.action.mutability === 'delegate'
+    ? (Number.isInteger(event.action.delegationCount) ? event.action.delegationCount : 1)
+    : 0;
+  const evaluate = (state) => {
     const action = {
       mutability: event.action.mutability,
+      analysisReason: event.action.analysisReason,
+      legacyDelegationProtocol,
       delegationCount,
       hashIntent: Boolean(event.action.hashIntent),
       reachability: event.action.reachability,
@@ -149,23 +178,31 @@ function handleBeforeAction(event, options) {
       affectedPaths: event.action.affectedPaths,
       cwd: event.action.cwd,
       dependencyIntent: Boolean(event.action.dependencyIntent),
-      unboundedDelegation: Boolean(event.action.unboundedDelegation)
+      unboundedDelegation: Boolean(event.action.unboundedDelegation),
+      delegationLifecycleUnproven: Boolean(event.action.delegationLifecycleUnproven)
     };
-    const result = decide({ contract: state.contract, action, state });
-
-    if (event.action.mutability === 'delegate' && result.outcome === 'allow' && state.contract.agentPolicy !== 'allow') {
-      state.contract.agentsUsed += delegationCount;
-      writeState(event.sessionId, state, options.dataDir);
+    const summary = inspectDelegation(state.delegation, { id: event.action.id, delegationCount });
+    action.duplicateActionConflict = summary.duplicateActionConflict;
+    action.alreadyReserved = summary.alreadyReserved;
+    const result = decide({ contract: state.contract, action, delegation: summary, state });
+    if (changesDelegation && ['allow', 'report_and_defer'].includes(result.outcome)) {
+      state.delegation = applyDelegationFact(state.delegation, {
+        kind: 'accepted', id: event.action.id || 'legacy:unidentified', count: delegationCount,
+        completionScope: event.action.completionScope,
+        uncertainty: legacyDelegationProtocol ? 'legacy_protocol'
+          : action.unboundedDelegation ? 'unbounded_execution'
+          : action.delegationLifecycleUnproven ? 'unversioned_resume' : null
+      });
     }
     return { state, result };
   };
 
   // Separate host processes can issue independent agent launches close together.
-  // Serialize delegation decisions so finite agents=N remains a real budget
-  // across separate Hook processes without adding locks to the common fast path.
-  const { state, result } = event.action.mutability === 'delegate'
-    ? withSessionLock(event.sessionId, options.dataDir, evaluate)
-    : evaluate();
+  // Serialize delegation reservations across Hook processes. Prompt updates
+  // and completion handlers use the same lock; pure reads stay unlocked.
+  const { state, result } = changesDelegation
+    ? updateSession(event.sessionId, options.dataDir, evaluate)
+    : evaluate(readState(event.sessionId, options.dataDir));
 
   const denied = result.outcome === 'deny_and_explain' || result.outcome === 'require_user_approval';
   const responseOutcome = denied
@@ -173,39 +210,81 @@ function handleBeforeAction(event, options) {
     : result.outcome === 'report_and_defer' ? 'context_returned' : 'none';
   const auditEvent = recordDecision({
     sessionId: event.sessionId,
-    action: event.action,
+    action: { ...event.action, delegationCount },
     contract: state.contract,
+    delegation: state.delegation,
     decision: result,
     responseOutcome
   }, options);
 
   if (denied) {
-    return { kind: 'deny', decision: result, eventId: auditEvent && auditEvent.eventId, message: decisionMessage(result, state.contract, auditEvent, responseOutcome) };
+    return { kind: 'deny', decision: result, eventId: auditEvent && auditEvent.eventId, message: decisionMessage(result, state.contract, auditEvent, responseOutcome, event.action.analysisReason) };
   }
   if (responseOutcome === 'context_returned') {
-    return context(decisionMessage(result, state.contract, auditEvent, responseOutcome));
+    return context(decisionMessage(result, state.contract, auditEvent, responseOutcome, event.action.analysisReason));
   }
   return none();
 }
 
+function handleAfterAction(event, options) {
+  if (!supportsLifecycleFacts(event)) return none();
+  return updateSession(event.sessionId, options.dataDir, (state) => {
+    // Only a declared facts adapter may report binding or completion. A false
+    // async flag can be a request parameter and never proves children joined.
+    const kind = event.action.lifecycle || (event.action.completed === true ? 'joined'
+      : event.action.asyncLaunched === true ? 'running' : 'unknown');
+    state.delegation = applyDelegationFact(state.delegation, {
+      kind, id: event.action.id, agentId: event.action.agentId, agentAliases: event.action.agentAliases
+    });
+    for (const agentId of event.action.endedAgentIds || []) {
+      state.delegation = applyDelegationFact(state.delegation, { kind: 'child_stopped', agentId });
+    }
+    return none();
+  });
+}
+
 function handleLifecycleContext(event, options) {
-  const state = readState(event.sessionId, options.dataDir);
-  return context(contractContext(state.contract));
+  // An older adapter may borrow the current protocol number but still map stop
+  // attempts to terminal events. Its facts cannot mutate the current ledger.
+  if (!supportsLifecycleFacts(event) && event.kind !== 'session.start') return none();
+  const update = (state) => {
+    const fact = event.kind === 'subagent.start'
+      ? { kind: 'child_started', agentId: event.agentId, agentAlias: event.agentAlias, reservationId: event.reservationId }
+      : event.kind === 'subagent.stop' ? { kind: 'child_stopped', agentId: event.agentId }
+      : { kind: event.allDelegationsStopped === true ? 'all_stopped' : 'unknown' };
+    state.delegation = applyDelegationFact(state.delegation, fact);
+    return context(contractContext(state.contract, state.delegation, 'active', state.directiveWarning));
+  };
+  // Ordinary session end carries no completion fact. Keep its context response
+  // without waiting for another writer or rewriting state during shutdown.
+  const readOnly = event.kind === 'session.start'
+    || event.kind === 'session.end' && event.allDelegationsStopped !== true;
+  return readOnly ? update(readState(event.sessionId, options.dataDir))
+    : updateSession(event.sessionId, options.dataDir, update);
 }
 
 function handleControlEvent(rawEvent, options = {}) {
-  const event = assertControlEvent(rawEvent);
+  let event = assertControlEvent(rawEvent);
+  if (event.action && event.action.id && event.sourceSessionId && event.sourceSessionId !== event.sessionId) {
+    event = { ...event, action: { ...event.action, id: JSON.stringify([event.sourceSessionId, event.action.id]) } };
+  }
   switch (event.kind) {
     case 'prompt.submit':
-      return handlePrompt(event, options);
+      return runtimeCommand(event.prompt)
+        ? handlePrompt(event, readState(event.sessionId, options.dataDir), options)
+        : updateSession(event.sessionId, options.dataDir, state => handlePrompt(event, state, options));
     case 'action.before':
       return handleBeforeAction(event, options);
+    case 'action.after':
+      return handleAfterAction(event, options);
     case 'session.start':
     case 'subagent.start':
+    case 'subagent.stop':
+    case 'session.end':
       return handleLifecycleContext(event, options);
     default:
       return none();
   }
 }
 
-module.exports = { contractContext, handleControlEvent };
+module.exports = { contractContext, handleControlEvent, runtimeCommand };

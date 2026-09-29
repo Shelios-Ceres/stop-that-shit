@@ -8,17 +8,20 @@ const __modules = {
 
 const { PROTOCOL_VERSION } = __require("src/control-protocol.cjs");
 const { handleControlEvent } = __require("src/controller.cjs");
+const { readState } = __require("src/state.cjs");
 const {
-  classifyHermesTool,
-  countHermesDelegation,
-  detectDependencyIntent,
-  detectHashIntent,
-  extractAffectedPaths
+  analyzeHermesTool,
+  countHermesDelegation
 } = __require("src/adapters/hermes-tool-classifier.cjs");
+const { optionalIdentifier } = __require("src/adapters/lifecycle-fields.cjs");
 
 const EVENT_KIND = {
   pre_llm_call: 'prompt.submit',
-  pre_tool_call: 'action.before'
+  pre_tool_call: 'action.before',
+  post_tool_call: 'action.after',
+  subagent_start: 'subagent.start',
+  subagent_stop: 'subagent.stop',
+  on_session_end: 'session.end'
 };
 
 function toControlEvent(input) {
@@ -29,9 +32,10 @@ function toControlEvent(input) {
   const extra = input.extra && typeof input.extra === 'object' ? input.extra : {};
   const event = {
     protocolVersion: PROTOCOL_VERSION,
+    lifecycleVersion: 2,
     kind,
-    sessionId: String(input.session_id || ''),
-    turnId: extra.turn_id || input.turn_id || null,
+    sessionId: String(input.session_id || extra.parent_session_id || ''),
+    turnId: extra.turn_id || extra.parent_turn_id || input.turn_id || null,
     host: {
       family: 'hermes-agent',
       model: input.model || extra.model || null,
@@ -46,26 +50,74 @@ function toControlEvent(input) {
   }
 
   if (kind === 'action.before') {
-    event.action = {
-      id: input.tool_call_id || extra.tool_call_id || null,
+    const analysis = analyzeHermesTool(input.tool_name, input.tool_input, input.cwd);
+    const actionId = optionalIdentifier(input.tool_call_id, extra.tool_call_id);
+    if (analysis.mutability === 'delegate' && !actionId) return null;
+    const action = {
+      id: actionId,
       name: String(input.tool_name || 'unknown'),
       input: input.tool_input,
-      mutability: classifyHermesTool(input.tool_name, input.tool_input),
+      ...analysis,
       delegationCount: countHermesDelegation(input.tool_name, input.tool_input),
-      hashIntent: detectHashIntent(input.tool_name, input.tool_input),
-      dependencyIntent: detectDependencyIntent(input.tool_name, input.tool_input),
-      affectedPaths: extractAffectedPaths(input.tool_name, input.tool_input, input.cwd),
       cwd: input.cwd,
       unboundedDelegation: false
     };
+    event.action = {
+      ...action
+    };
+  }
+
+  if (kind === 'action.after') {
+    const actionId = optionalIdentifier(input.tool_call_id, extra.tool_call_id);
+    if (!actionId) return null;
+    event.action = { id: String(actionId) };
+    event.action.lifecycle = 'unknown';
+    if (input.tool_name === 'delegate_task') {
+      let result = extra.result;
+      if (typeof result === 'string') { try { result = JSON.parse(result); } catch { result = null; } }
+      if (result && result.status === 'dispatched' && result.mode === 'background') {
+        event.action.lifecycle = 'running';
+        if (Array.isArray(result.subagent_ids)) {
+          event.action.agentAliases = result.subagent_ids.filter(id => typeof id === 'string' && id);
+        }
+      } else if (result && Array.isArray(result.results) && result.results.length
+          && result.results.every(entry => entry && ['completed', 'failed', 'error'].includes(entry.status))) {
+        event.action.lifecycle = 'joined';
+      }
+    }
+  }
+
+  if (kind === 'subagent.start' || kind === 'subagent.stop') {
+    // timeout/interrupted hooks can fire while a worker is still alive.
+    if (kind === 'subagent.stop' && !['completed', 'failed', 'error'].includes(extra.child_status)) return null;
+    if (kind === 'subagent.start') {
+      const alias = optionalIdentifier(extra.child_subagent_id, input.child_subagent_id);
+      if (alias) event.agentAlias = alias;
+    }
+    const agentId = extra.child_session_id
+      || input.child_session_id
+      || extra.child_subagent_id
+      || input.child_subagent_id
+      || null;
+    const normalizedAgentId = optionalIdentifier(agentId);
+    if (normalizedAgentId) event.agentId = normalizedAgentId;
   }
 
   return event;
 }
 
-function fromControlResult(result) {
+function directiveErrorText(error) {
+  return `Stop That Shit directive rejected (${error.code}): ${error.message} `
+    + 'The previous contract is unchanged. Tools are paused until you submit a corrected instruction.';
+}
+
+function fromControlResult(result, kind) {
   if (!result || result.kind === 'none') return null;
-  if (result.kind === 'context') return { context: result.text };
+  if (result.kind === 'prompt-error') return { context: directiveErrorText(result.error) };
+  if (result.kind === 'context') {
+    if (['subagent.start', 'subagent.stop', 'session.end'].includes(kind)) return null;
+    return { context: result.text };
+  }
   if (result.kind === 'deny') return { action: 'block', message: result.message };
   return null;
 }
@@ -73,7 +125,19 @@ function fromControlResult(result) {
 function handleHermesHook(input, options = {}) {
   const event = toControlEvent(input);
   if (!event) return null;
-  return fromControlResult(handleControlEvent(event, options));
+  // pre_llm_call can add context but cannot reject a user turn. Keep invalid
+  // input from executing through the existing pre_tool_call block response.
+  if (event.kind === 'action.before') {
+    const error = readState(event.sessionId, options.dataDir).directiveError;
+    if (error) return { action: 'block', message: directiveErrorText(error) };
+  }
+  const result = handleControlEvent(event, options);
+  const output = fromControlResult(result, event.kind);
+  if (event.kind === 'prompt.submit' && result.kind !== 'prompt-error') {
+    const error = readState(event.sessionId, options.dataDir).directiveError;
+    if (error) return { context: directiveErrorText(error) + (output ? `\n${output.context}` : '') };
+  }
+  return output;
 }
 
 module.exports = {
@@ -86,14 +150,38 @@ module.exports = {
 "src/control-protocol.cjs": function(module, exports, __require) {
 'use strict';
 
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 2;
 const EVENT_KINDS = new Set([
   'session.start',
   'prompt.submit',
   'action.before',
-  'subagent.start'
+  'action.after',
+  'subagent.start',
+  'subagent.stop',
+  'session.end'
 ]);
 const MUTABILITIES = new Set(['read', 'write', 'delegate', 'control', 'unknown']);
+const SHELL_ANALYSIS_REASONS = Object.freeze({
+  shell_syntax_unproven: 'This shell syntax cannot be confirmed as a static read.',
+  shell_command_unproven: 'This program is not a supported read-only command.',
+  shell_execution_option: 'This ripgrep option can execute another program.',
+  option_value_missing: 'A required command option value is missing.',
+  git_arguments_unproven: 'This Git subcommand or argument form is not supported as a read.',
+  native_quotes_unproven: 'Native argument passing can reinterpret these embedded quotes.',
+  native_empty_arguments: 'Dropping empty native arguments exposes a different operation.',
+  shell_redirection: 'This command redirects output and may write a file.',
+  git_output_file: 'This Git command requests an output file.'
+});
+
+function isShellAnalysisReason(value) {
+  return typeof value === 'string' && Object.hasOwn(SHELL_ANALYSIS_REASONS, value);
+}
+
+function supportsLifecycleFacts(event) {
+  // The adapter must declare its own lifecycle semantics. Older adapters import
+  // PROTOCOL_VERSION from the runtime, so that number alone cannot identify them.
+  return event.protocolVersion === PROTOCOL_VERSION && event.lifecycleVersion === 2;
+}
 
 function nonEmptyString(value, field) {
   if (typeof value !== 'string' || !value.trim()) {
@@ -105,7 +193,7 @@ function assertControlEvent(event) {
   if (!event || typeof event !== 'object') {
     throw new TypeError('ControlEvent must be an object.');
   }
-  if (event.protocolVersion !== PROTOCOL_VERSION) {
+  if (![1, PROTOCOL_VERSION].includes(event.protocolVersion)) {
     throw new TypeError(`Unsupported ControlEvent protocolVersion: ${event.protocolVersion}.`);
   }
   if (!EVENT_KINDS.has(event.kind)) {
@@ -124,21 +212,65 @@ function assertControlEvent(event) {
     if (!MUTABILITIES.has(event.action.mutability)) {
       throw new TypeError(`Unsupported action mutability: ${event.action.mutability}.`);
     }
+    if (event.action.analysisReason !== undefined && !isShellAnalysisReason(event.action.analysisReason)) {
+      throw new TypeError('Unsupported action analysis reason.');
+    }
+    if (event.action.mutability === 'delegate' || event.action.delegationLifecycleUnproven) nonEmptyString(event.action.id, 'action.id');
     if (
       event.action.delegationCount !== undefined
-      && (!Number.isInteger(event.action.delegationCount) || event.action.delegationCount < 0)
+      && (!Number.isSafeInteger(event.action.delegationCount) || event.action.delegationCount < 0)
     ) {
       throw new TypeError('ControlEvent action.delegationCount must be a non-negative integer.');
     }
+    if (event.action.asyncLaunched !== undefined && typeof event.action.asyncLaunched !== 'boolean') {
+      throw new TypeError('ControlEvent action.asyncLaunched must be a boolean when provided.');
+    }
+  }
+  if (event.kind === 'action.after') {
+    if (!event.action || typeof event.action !== 'object') {
+      throw new TypeError(`ControlEvent ${event.kind} requires an action object.`);
+    }
+    nonEmptyString(event.action.id, 'action.id');
+    if (event.action.agentId !== undefined && event.action.agentId !== null) {
+      nonEmptyString(event.action.agentId, 'action.agentId');
+    }
+    for (const field of ['agentAliases', 'endedAgentIds']) {
+      if (event.action[field] !== undefined) {
+        if (!Array.isArray(event.action[field])) throw new TypeError(`action.${field} must be an array.`);
+        for (const id of event.action[field]) nonEmptyString(id, `action.${field}`);
+      }
+    }
+    if (event.action.lifecycle !== undefined && !['running', 'joined', 'not_started', 'unknown'].includes(event.action.lifecycle)) {
+      throw new TypeError('Unsupported action.lifecycle fact.');
+    }
+    if (event.action.completed !== undefined && typeof event.action.completed !== 'boolean') {
+      throw new TypeError('ControlEvent action.completed must be a boolean when provided.');
+    }
+    if (event.action.asyncLaunched !== undefined && typeof event.action.asyncLaunched !== 'boolean') {
+      throw new TypeError('ControlEvent action.asyncLaunched must be a boolean when provided.');
+    }
+  }
+  if (event.kind === 'subagent.start' || event.kind === 'subagent.stop') {
+    for (const field of ['agentId', 'agentAlias', 'reservationId']) {
+      if (event[field] !== undefined && event[field] !== null) nonEmptyString(event[field], field);
+    }
   }
 
+  if (event.allDelegationsStopped !== undefined && typeof event.allDelegationsStopped !== 'boolean') throw new TypeError('allDelegationsStopped must be boolean.');
+  if (event.sourceSessionId !== undefined) nonEmptyString(event.sourceSessionId, 'sourceSessionId');
+  if (event.action && event.action.completionScope !== undefined && !['call', 'children'].includes(event.action.completionScope)) {
+    throw new TypeError('Unsupported action.completionScope.');
+  }
   return event;
 }
 
 module.exports = {
+  SHELL_ANALYSIS_REASONS,
+  isShellAnalysisReason,
   EVENT_KINDS,
   MUTABILITIES,
   PROTOCOL_VERSION,
+  supportsLifecycleFacts,
   assertControlEvent
 };
 
@@ -146,12 +278,13 @@ module.exports = {
 "src/controller.cjs": function(module, exports, __require) {
 'use strict';
 
-const { parseContractPrompt } = __require("src/contracts.cjs");
-const { assertControlEvent } = __require("src/control-protocol.cjs");
+const { DEFAULT_AGENT_LIMIT, parseContractPrompt } = __require("src/contracts.cjs");
+const { SHELL_ANALYSIS_REASONS, isShellAnalysisReason, assertControlEvent, supportsLifecycleFacts } = __require("src/control-protocol.cjs");
+const { inspectDelegation, applyDelegationFact } = __require("src/delegation-state.cjs");
 const { decide } = __require("src/decision.cjs");
 const { readRuntime, recordDecision } = __require("src/runtime-audit.cjs");
 const { recordAnnotation } = __require("src/runtime-annotations.cjs");
-const { readState, withSessionLock, writeState } = __require("src/state.cjs");
+const { readState, updateSession } = __require("src/state.cjs");
 
 function none() {
   return { kind: 'none' };
@@ -161,25 +294,38 @@ function context(text) {
   return { kind: 'context', text };
 }
 
-function contractContext(contract, phase = 'active') {
+function contractContext(contract, delegation = {}, phase = 'active', directiveWarning = null) {
+  if (typeof delegation === 'string') {
+    phase = delegation;
+    delegation = {};
+  }
   if (contract.level === 'off') {
-    return 'Stop That Shit is disabled for this session. No plugin decision is being enforced.';
+    return [
+      directiveWarning && directiveWarning.message ? `Warning: ${directiveWarning.message}` : null,
+      'Stop That Shit is disabled for this session. No plugin decision is being enforced.'
+    ].filter(Boolean).join(' ');
   }
   if (contract.mode === 'unconfirmed') {
     return [
+      directiveWarning && directiveWarning.message ? `Warning: ${directiveWarning.message}` : null,
       'Stop That Shit is in watch-only mode because no task mode is confirmed.',
       'Use $stop-that-shit review for read-only work, or change for implementation. The default fast path relies on the Stop Ladder and does not claim a full machine contract.',
       'Do not claim that mutations are being blocked until a mode is confirmed.'
-    ].join(' ');
+    ].filter(Boolean).join(' ');
   }
 
+  const agentLimit = Number.isSafeInteger(contract.agentBudget) && contract.agentBudget >= 0
+    ? contract.agentBudget
+    : DEFAULT_AGENT_LIMIT;
+
   return [
-    `Stop That Shit (${phase}): mode=${contract.mode}; agents=${contract.agentPolicy === 'allow' ? 'allow' : `${contract.agentsUsed}/${contract.agentBudget}`}; hash=${contract.hashPolicy || 'deny'}; deps=${contract.dependencyPolicy || 'ask'}; files=${Array.isArray(contract.allowedPaths) ? contract.allowedPaths.join('|') : 'unbounded'}.`,
+    directiveWarning && directiveWarning.message ? `Warning: ${directiveWarning.message}` : null,
+    `Stop That Shit (${phase}): mode=${contract.mode}; agents=${inspectDelegation(delegation).reservedUpperBound}/${agentLimit} reserved${inspectDelegation(delegation).unresolvedReasons.length ? "; count unproven" : ""}; hash=${contract.hashPolicy || 'deny'}; deps=${contract.dependencyPolicy || 'ask'}; files=${Array.isArray(contract.allowedPaths) ? contract.allowedPaths.join('|') : 'unbounded'}.`,
     'Stop Ladder: Is it requested? Is it necessary? What reachable evidence proves that? Would omission fail the current acceptance?',
     'Report real findings even when implementation is not authorized.',
     'Before expanding scope, name reachable evidence, failure if omitted, and the fact that changes the next action.',
     'Harness interception coverage is a guardrail, not a security boundary.'
-  ].join(' ');
+  ].filter(Boolean).join(' ');
 }
 
 const FAMILY_NAMES = { I: 'INTENT', H: 'HASH', S: 'SCOPE', T: 'THRASH' };
@@ -189,7 +335,7 @@ function activeControlState(contract) {
   return contract.level === 'watch' ? 'OBSERVING' : 'ARMED';
 }
 
-function decisionMessage(result, contract, event, responseOutcome) {
+function decisionMessage(result, contract, event, responseOutcome, analysisReason) {
   const observing = responseOutcome === 'context_returned';
   const executionDenial = responseOutcome === 'execution_denial_returned';
   const lines = [
@@ -198,6 +344,8 @@ function decisionMessage(result, contract, event, responseOutcome) {
       ? 'Guard returned context; it did not deny the action.'
       : executionDenial ? 'Guard returned a pre-execution denial.' : 'Guard returned permission deny.',
     `Reason: ${result.reasonCode}`,
+    ...(isShellAnalysisReason(analysisReason) && ['MODE_FORBIDS_MUTATION', 'MUTABILITY_UNPROVEN'].includes(result.reasonCode)
+      ? [`Detail: ${result.explanation}`] : []),
     `Code: ${result.family}/${result.reasonCode}`,
     `State: ${activeControlState(contract)} / ${contract.mode}`
   ];
@@ -207,7 +355,7 @@ function decisionMessage(result, contract, event, responseOutcome) {
 }
 
 function runtimeCommand(prompt) {
-  const match = /^\s*\$stop-that-shit\s+(status|runtime(?:\s+all)?|explain\s+(evt_[0-9a-f-]+)|label\s+(evt_[0-9a-f-]+)\s+(correct|incorrect|inconclusive))\s*$/i.exec(prompt);
+  const match = /^(?:[ \t]*\r?\n)* {0,3}\$stop-that-shit[ \t]+(status|runtime(?:[ \t]+all)?|explain[ \t]+(evt_[0-9a-f-]+)|label[ \t]+(evt_[0-9a-f-]+)[ \t]+(correct|incorrect|inconclusive))[ \t]*(?:\r?\n[ \t]*)*$/i.exec(prompt);
   if (!match) return null;
   const words = match[1].toLowerCase().split(/\s+/);
   return { name: words[0], all: words[1] === 'all', eventId: match[2] || match[3] || null, label: match[4] || null };
@@ -237,7 +385,7 @@ function handleRuntimeCommand(command, event, state, options) {
     return context([
       'Stop That Shit status',
       `State: ${activeControlState(state.contract)} / ${state.contract.mode}`,
-      `Agent policy: ${state.contract.agentPolicy === 'allow' ? 'allow' : `finite (${state.contract.agentsUsed}/${state.contract.agentBudget})`}`,
+      `Agents: ${inspectDelegation(state.delegation).reservedUpperBound}/${state.contract.agentBudget} reserved${inspectDelegation(state.delegation).unresolvedReasons.length ? '; count unproven' : ''}`,
       'Host effect: unobserved',
       'Use runtime for checked-action and Guard-response counts.'
     ].join('\n'));
@@ -258,8 +406,10 @@ function handleRuntimeCommand(command, event, state, options) {
   return context([
     `Stop That Shit event ${found.eventId}`,
     `State: ${found.controlState.toUpperCase()} / ${found.contract.mode}`,
-    `Agent policy: ${found.contract.agentPolicy === 'allow' ? 'allow' : `finite (${found.contract.agentsUsed}/${found.contract.agentBudget})`}`,
+    `Agent limit: ${found.contract.agentBudget}`,
     `Action: ${found.action.toolName} (${found.action.mutability}); paths=${found.action.pathCount}`,
+    ...(isShellAnalysisReason(found.action.analysisReason)
+      ? [`Analysis: ${SHELL_ANALYSIS_REASONS[found.action.analysisReason]}`] : []),
     `Decision: ${found.decision.policyOutcome} / ${found.decision.reasonCode}`,
     `Response: ${found.decision.responseOutcome}`,
     `Host effect: ${found.decision.hostEffect}`,
@@ -267,27 +417,38 @@ function handleRuntimeCommand(command, event, state, options) {
   ].join('\n'));
 }
 
-function handlePrompt(event, options) {
-  const state = readState(event.sessionId, options.dataDir);
+function handlePrompt(event, state, options) {
   const command = runtimeCommand(event.prompt);
   if (command) return handleRuntimeCommand(command, event, state, options);
   const parsed = parseContractPrompt(event.prompt, state.contract);
+  if (parsed.error) {
+    state.directiveError = parsed.error;
+    state.directiveWarning = null;
+    state.lastPromptContext = null;
+    return { kind: 'prompt-error', error: parsed.error, message: parsed.error.message };
+  }
   state.contract = parsed.contract;
-  const promptContext = contractContext(state.contract);
+  if (parsed.directive || parsed.correction) state.directiveError = null;
+  if (parsed.directive || parsed.correction) state.directiveWarning = parsed.warning;
+  const promptContext = contractContext(state.contract, state.delegation, 'active', state.directiveWarning);
   const repeatedContext = state.lastPromptContext === promptContext;
   state.lastPromptContext = promptContext;
-  writeState(event.sessionId, state, options.dataDir);
   return repeatedContext ? none() : context(promptContext);
 }
 
 function handleBeforeAction(event, options) {
-  const evaluate = () => {
-    const state = readState(event.sessionId, options.dataDir);
-    const delegationCount = event.action.mutability === 'delegate'
-      ? (Number.isInteger(event.action.delegationCount) ? event.action.delegationCount : 1)
-      : 0;
+  const legacyDelegationProtocol = !supportsLifecycleFacts(event)
+    && ['delegate', 'control', 'unknown'].includes(event.action.mutability);
+  const changesDelegation = event.action.mutability === 'delegate'
+    || event.action.delegationLifecycleUnproven || legacyDelegationProtocol;
+  const delegationCount = event.action.mutability === 'delegate'
+    ? (Number.isInteger(event.action.delegationCount) ? event.action.delegationCount : 1)
+    : 0;
+  const evaluate = (state) => {
     const action = {
       mutability: event.action.mutability,
+      analysisReason: event.action.analysisReason,
+      legacyDelegationProtocol,
       delegationCount,
       hashIntent: Boolean(event.action.hashIntent),
       reachability: event.action.reachability,
@@ -295,23 +456,31 @@ function handleBeforeAction(event, options) {
       affectedPaths: event.action.affectedPaths,
       cwd: event.action.cwd,
       dependencyIntent: Boolean(event.action.dependencyIntent),
-      unboundedDelegation: Boolean(event.action.unboundedDelegation)
+      unboundedDelegation: Boolean(event.action.unboundedDelegation),
+      delegationLifecycleUnproven: Boolean(event.action.delegationLifecycleUnproven)
     };
-    const result = decide({ contract: state.contract, action, state });
-
-    if (event.action.mutability === 'delegate' && result.outcome === 'allow' && state.contract.agentPolicy !== 'allow') {
-      state.contract.agentsUsed += delegationCount;
-      writeState(event.sessionId, state, options.dataDir);
+    const summary = inspectDelegation(state.delegation, { id: event.action.id, delegationCount });
+    action.duplicateActionConflict = summary.duplicateActionConflict;
+    action.alreadyReserved = summary.alreadyReserved;
+    const result = decide({ contract: state.contract, action, delegation: summary, state });
+    if (changesDelegation && ['allow', 'report_and_defer'].includes(result.outcome)) {
+      state.delegation = applyDelegationFact(state.delegation, {
+        kind: 'accepted', id: event.action.id || 'legacy:unidentified', count: delegationCount,
+        completionScope: event.action.completionScope,
+        uncertainty: legacyDelegationProtocol ? 'legacy_protocol'
+          : action.unboundedDelegation ? 'unbounded_execution'
+          : action.delegationLifecycleUnproven ? 'unversioned_resume' : null
+      });
     }
     return { state, result };
   };
 
   // Separate host processes can issue independent agent launches close together.
-  // Serialize delegation decisions so finite agents=N remains a real budget
-  // across separate Hook processes without adding locks to the common fast path.
-  const { state, result } = event.action.mutability === 'delegate'
-    ? withSessionLock(event.sessionId, options.dataDir, evaluate)
-    : evaluate();
+  // Serialize delegation reservations across Hook processes. Prompt updates
+  // and completion handlers use the same lock; pure reads stay unlocked.
+  const { state, result } = changesDelegation
+    ? updateSession(event.sessionId, options.dataDir, evaluate)
+    : evaluate(readState(event.sessionId, options.dataDir));
 
   const denied = result.outcome === 'deny_and_explain' || result.outcome === 'require_user_approval';
   const responseOutcome = denied
@@ -319,42 +488,84 @@ function handleBeforeAction(event, options) {
     : result.outcome === 'report_and_defer' ? 'context_returned' : 'none';
   const auditEvent = recordDecision({
     sessionId: event.sessionId,
-    action: event.action,
+    action: { ...event.action, delegationCount },
     contract: state.contract,
+    delegation: state.delegation,
     decision: result,
     responseOutcome
   }, options);
 
   if (denied) {
-    return { kind: 'deny', decision: result, eventId: auditEvent && auditEvent.eventId, message: decisionMessage(result, state.contract, auditEvent, responseOutcome) };
+    return { kind: 'deny', decision: result, eventId: auditEvent && auditEvent.eventId, message: decisionMessage(result, state.contract, auditEvent, responseOutcome, event.action.analysisReason) };
   }
   if (responseOutcome === 'context_returned') {
-    return context(decisionMessage(result, state.contract, auditEvent, responseOutcome));
+    return context(decisionMessage(result, state.contract, auditEvent, responseOutcome, event.action.analysisReason));
   }
   return none();
 }
 
+function handleAfterAction(event, options) {
+  if (!supportsLifecycleFacts(event)) return none();
+  return updateSession(event.sessionId, options.dataDir, (state) => {
+    // Only a declared facts adapter may report binding or completion. A false
+    // async flag can be a request parameter and never proves children joined.
+    const kind = event.action.lifecycle || (event.action.completed === true ? 'joined'
+      : event.action.asyncLaunched === true ? 'running' : 'unknown');
+    state.delegation = applyDelegationFact(state.delegation, {
+      kind, id: event.action.id, agentId: event.action.agentId, agentAliases: event.action.agentAliases
+    });
+    for (const agentId of event.action.endedAgentIds || []) {
+      state.delegation = applyDelegationFact(state.delegation, { kind: 'child_stopped', agentId });
+    }
+    return none();
+  });
+}
+
 function handleLifecycleContext(event, options) {
-  const state = readState(event.sessionId, options.dataDir);
-  return context(contractContext(state.contract));
+  // An older adapter may borrow the current protocol number but still map stop
+  // attempts to terminal events. Its facts cannot mutate the current ledger.
+  if (!supportsLifecycleFacts(event) && event.kind !== 'session.start') return none();
+  const update = (state) => {
+    const fact = event.kind === 'subagent.start'
+      ? { kind: 'child_started', agentId: event.agentId, agentAlias: event.agentAlias, reservationId: event.reservationId }
+      : event.kind === 'subagent.stop' ? { kind: 'child_stopped', agentId: event.agentId }
+      : { kind: event.allDelegationsStopped === true ? 'all_stopped' : 'unknown' };
+    state.delegation = applyDelegationFact(state.delegation, fact);
+    return context(contractContext(state.contract, state.delegation, 'active', state.directiveWarning));
+  };
+  // Ordinary session end carries no completion fact. Keep its context response
+  // without waiting for another writer or rewriting state during shutdown.
+  const readOnly = event.kind === 'session.start'
+    || event.kind === 'session.end' && event.allDelegationsStopped !== true;
+  return readOnly ? update(readState(event.sessionId, options.dataDir))
+    : updateSession(event.sessionId, options.dataDir, update);
 }
 
 function handleControlEvent(rawEvent, options = {}) {
-  const event = assertControlEvent(rawEvent);
+  let event = assertControlEvent(rawEvent);
+  if (event.action && event.action.id && event.sourceSessionId && event.sourceSessionId !== event.sessionId) {
+    event = { ...event, action: { ...event.action, id: JSON.stringify([event.sourceSessionId, event.action.id]) } };
+  }
   switch (event.kind) {
     case 'prompt.submit':
-      return handlePrompt(event, options);
+      return runtimeCommand(event.prompt)
+        ? handlePrompt(event, readState(event.sessionId, options.dataDir), options)
+        : updateSession(event.sessionId, options.dataDir, state => handlePrompt(event, state, options));
     case 'action.before':
       return handleBeforeAction(event, options);
+    case 'action.after':
+      return handleAfterAction(event, options);
     case 'session.start':
     case 'subagent.start':
+    case 'subagent.stop':
+    case 'session.end':
       return handleLifecycleContext(event, options);
     default:
       return none();
   }
 }
 
-module.exports = { contractContext, handleControlEvent };
+module.exports = { contractContext, handleControlEvent, runtimeCommand };
 
 },
 "src/contracts.cjs": function(module, exports, __require) {
@@ -364,14 +575,13 @@ const MODES = new Set(['answer', 'review', 'change', 'monitor', 'open']);
 const LEVELS = new Set(['watch', 'guard', 'lock', 'off']);
 const HASH_POLICIES = new Set(['deny', 'ask', 'allow']);
 const SCOPE_POLICIES = new Set(['deny', 'ask', 'allow']);
+const DEFAULT_AGENT_LIMIT = Number.MAX_SAFE_INTEGER;
 
 function defaultContract() {
   return {
     mode: 'unconfirmed',
     level: 'watch',
-    agentPolicy: 'finite',
-    agentBudget: 0,
-    agentsUsed: 0,
+    agentBudget: DEFAULT_AGENT_LIMIT,
     hashPolicy: 'deny',
     allowedPaths: null,
     dependencyPolicy: 'ask',
@@ -380,45 +590,135 @@ function defaultContract() {
 }
 
 function directiveHead(prompt, matchEnd) {
-  const tail = prompt.slice(matchEnd).trimStart();
+  const tail = prompt.slice(matchEnd).replace(/^[ \t]+/, '');
   const boundaries = [tail.indexOf('--'), tail.search(/:(?=\s|$)/), tail.indexOf('\n')]
     .filter((index) => index >= 0);
-  const end = boundaries.length ? Math.min(...boundaries) : Math.min(tail.length, 80);
+  const end = boundaries.length ? Math.min(...boundaries) : tail.length;
   return tail.slice(0, end).trim();
 }
 
 function parseDirective(prompt) {
-  const firstContentLine = String(prompt || '').split(/\r?\n/).find((line) => line.trim()) || '';
-  const mention = /^\s*\$stop-that-shit\b/i.exec(firstContentLine);
+  // A directive starts the first non-empty line, outside quoted/code content.
+  // Four spaces or a tab denote an indented code example, not an invocation.
+  const mention = /^(?:[ \t]*\r?\n)* {0,3}\$stop-that-shit(?=$|[\s,:])/i.exec(prompt);
   if (!mention) return null;
 
-  const head = directiveHead(firstContentLine, mention.index + mention[0].length);
+  const head = directiveHead(prompt, mention.index + mention[0].length);
   const tokens = head.split(/[\s,]+/).map((token) => token.trim()).filter(Boolean);
-  const parsed = { mentioned: true };
+  const parsed = { mentioned: true, error: null, warning: null };
+
+  function setField(field, value, token) {
+    if (Object.hasOwn(parsed, field) && JSON.stringify(parsed[field]) !== JSON.stringify(value)) {
+      parsed.error = {
+        code: 'CONFLICTING_DIRECTIVE', token,
+        message: `Conflicting values for ${field}. Submit one value per directive field.`
+      };
+    } else {
+      parsed[field] = value;
+    }
+  }
 
   for (const rawToken of tokens) {
+    if (parsed.error) break;
     const token = rawToken.toLowerCase();
-    if (MODES.has(token)) parsed.mode = token;
-    if (LEVELS.has(token)) parsed.level = token;
-    const agents = /^agents=(\d+)$/.exec(token);
-    if (agents) {
-      parsed.agentPolicy = 'finite';
-      parsed.agentBudget = Math.min(Number(agents[1]), 8);
+    if (MODES.has(token)) {
+      setField('mode', token, rawToken);
+      continue;
     }
-    if (token === 'agents=allow') parsed.agentPolicy = 'allow';
+    if (LEVELS.has(token)) {
+      setField('level', token, rawToken);
+      continue;
+    }
+    const agents = /^agents=(.*)$/i.exec(rawToken);
+    if (agents) {
+      const value = parseAgentLimit(agents[1]);
+      if (value === null) {
+        parsed.error = invalidAgentLimit(rawToken);
+        break;
+      }
+      setField('agentBudget', value, rawToken);
+      continue;
+    }
+    if (/^agents$/i.test(rawToken)) {
+      parsed.error = {
+        code: 'INVALID_AGENT_LIMIT',
+        token: rawToken,
+        message: `${rawToken} must be a non-negative safe integer.`
+      };
+      break;
+    }
+    if (/^(?:total-agents|concurrent-agents)(?:=|$)/i.test(rawToken)) {
+      parsed.error = {
+        code: 'UNSUPPORTED_AGENT_DIRECTIVE',
+        token: rawToken,
+        message: 'Use agents=N to set the maximum number of concurrently active subagents.'
+      };
+      break;
+    }
     const hash = /^hash=(deny|ask|allow)$/.exec(token);
-    if (hash && HASH_POLICIES.has(hash[1])) parsed.hashPolicy = hash[1];
+    if (hash && HASH_POLICIES.has(hash[1])) {
+      setField('hashPolicy', hash[1], rawToken);
+      continue;
+    }
     const files = /^files=(.*)$/i.exec(rawToken);
-    if (files) parsed.allowedPaths = files[1].split('|').map((value) => value.replace(/\\/g, '/')).filter(Boolean);
+    if (files) {
+      setField('allowedPaths', files[1].split('|').map((value) => value.replace(/\\/g, '/')).filter(Boolean), rawToken);
+      continue;
+    }
     const dependencies = /^deps=(deny|ask|allow)$/.exec(token);
-    if (dependencies && SCOPE_POLICIES.has(dependencies[1])) parsed.dependencyPolicy = dependencies[1];
+    if (dependencies && SCOPE_POLICIES.has(dependencies[1])) {
+      setField('dependencyPolicy', dependencies[1], rawToken);
+      continue;
+    }
+    parsed.error = {
+      code: 'INVALID_DIRECTIVE_TOKEN', token: rawToken,
+      message: 'Unknown directive field. Put task text after -- or on the next line.'
+    };
   }
 
   return parsed;
 }
 
+function parseAgentLimit(value) {
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function invalidAgentLimit(token) {
+  return {
+    code: 'INVALID_AGENT_LIMIT',
+    token,
+    message: `${token} must be a non-negative safe integer.`
+  };
+}
+
+function correctionProse(prompt) {
+  let fence = null;
+  // Keep a separator: removing an example must not join words into a new
+  // instruction, or expose a quoted "fix" as the start of the user's prompt.
+  const omitted = '\uFFFC';
+  return prompt.split(/\r?\n/).map((line) => {
+    if (fence) {
+      const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+      if (close && close[1][0] === fence[0] && close[1].length >= fence.length) fence = null;
+      return omitted;
+    }
+    if (/^(?: {0,3}>| {4}|\t)/.test(line)) return omitted;
+    const open = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (open && (open[1][0] !== '`' || !line.slice(open[0].length).includes('`'))) {
+      fence = open[1];
+      return omitted;
+    }
+    return line;
+  }).join('\n')
+    .replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, omitted)
+    .replace(/"(?:\\.|[^"\\])*"|(?<![\p{L}\p{N}\\])'[\s\S]*?(?<!\\)'(?![\p{L}\p{N}])|“[^”]*”|‘[^’]*’|「[^」]*」|『[^』]*』/gu, omitted)
+    .trim();
+}
+
 function naturalCorrection(prompt, previous) {
-  const text = prompt.trim();
+  const text = correctionProse(prompt);
 
   if (/^(?:stop|stop now|停止|停下来)[.!。！\s]*$/i.test(text)) {
     return { mode: 'answer', source: 'explicit-stop' };
@@ -442,17 +742,51 @@ function naturalCorrection(prompt, previous) {
   return null;
 }
 
+function validAgentBudget(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function normalizeContract(previousContract) {
+  const supplied = previousContract && typeof previousContract === 'object' ? previousContract : {};
+  const previous = { ...defaultContract(), ...supplied };
+  // The pre-lifecycle fork stored allow with a numeric placeholder of zero.
+  const suppliedAgentBudget = supplied.agentPolicy === 'allow'
+    ? DEFAULT_AGENT_LIMIT : validAgentBudget(supplied.agentBudget);
+  const concurrentAgentBudget = validAgentBudget(supplied.concurrentAgentBudget);
+  const totalAgentBudget = validAgentBudget(supplied.totalAgentBudget);
+  previous.agentBudget = suppliedAgentBudget
+    ?? (concurrentAgentBudget !== null && concurrentAgentBudget !== DEFAULT_AGENT_LIMIT
+      ? concurrentAgentBudget
+      : totalAgentBudget !== null && totalAgentBudget !== DEFAULT_AGENT_LIMIT
+        ? totalAgentBudget
+        : DEFAULT_AGENT_LIMIT);
+  delete previous.totalAgentBudget;
+  delete previous.concurrentAgentBudget;
+  delete previous.agentsUsed;
+  delete previous.agentPolicy;
+  return previous;
+}
+
 function parseContractPrompt(prompt, previousContract = defaultContract()) {
-  const previous = { ...defaultContract(), ...previousContract };
+  const previous = normalizeContract(previousContract);
   const directive = parseDirective(String(prompt || ''));
   const correction = naturalCorrection(String(prompt || ''), previous);
   const next = { ...previous };
   let changed = false;
 
   if (directive) {
+    if (directive.error) {
+      return {
+        contract: previous,
+        changed: false,
+        directive: true,
+        correction: Boolean(correction),
+        warning: null,
+        error: directive.error
+      };
+    }
     if (directive.mode && directive.mode !== next.mode) {
       next.mode = directive.mode;
-      next.agentsUsed = 0;
       changed = true;
     }
     if (directive.level && directive.level !== next.level) {
@@ -461,12 +795,6 @@ function parseContractPrompt(prompt, previousContract = defaultContract()) {
     }
     if (Number.isInteger(directive.agentBudget) && directive.agentBudget !== next.agentBudget) {
       next.agentBudget = directive.agentBudget;
-      next.agentsUsed = 0;
-      changed = true;
-    }
-    if (directive.agentPolicy && directive.agentPolicy !== next.agentPolicy) {
-      next.agentPolicy = directive.agentPolicy;
-      next.agentsUsed = 0;
       changed = true;
     }
     if (directive.hashPolicy && directive.hashPolicy !== next.hashPolicy) {
@@ -492,7 +820,6 @@ function parseContractPrompt(prompt, previousContract = defaultContract()) {
   } else if (correction) {
     if (correction.mode !== next.mode) {
       next.mode = correction.mode;
-      next.agentsUsed = 0;
       changed = true;
     }
     if (next.level === 'watch') {
@@ -506,7 +833,14 @@ function parseContractPrompt(prompt, previousContract = defaultContract()) {
     next.level = 'watch';
   }
 
-  return { contract: next, changed, directive: Boolean(directive), correction: Boolean(correction) };
+  return {
+    contract: next,
+    changed,
+    directive: Boolean(directive),
+    correction: Boolean(correction),
+    warning: directive && directive.warning ? directive.warning : null,
+    error: null
+  };
 }
 
 module.exports = {
@@ -514,8 +848,260 @@ module.exports = {
   SCOPE_POLICIES,
   LEVELS,
   MODES,
+  DEFAULT_AGENT_LIMIT,
   defaultContract,
   parseContractPrompt
+};
+
+},
+"src/delegation-state.cjs": function(module, exports, __require) {
+'use strict';
+
+function reservationsOf(state) {
+  return state && state.reservations && typeof state.reservations === 'object'
+    ? state.reservations
+    : {};
+}
+
+function seenAgentIds(state) {
+  return Array.isArray(state && state.agentIdsSeen) ? state.agentIdsSeen : [];
+}
+
+function stoppedAgentIds(state) {
+  return Array.isArray(state && state.stoppedAgentIds) ? state.stoppedAgentIds : [];
+}
+
+function acceptedActions(state) {
+  return state && state.acceptedActions && typeof state.acceptedActions === 'object'
+    ? state.acceptedActions
+    : {};
+}
+
+function acceptedActionCount(state, actionId) {
+  if (typeof actionId !== 'string' || !actionId) return null;
+  const count = acceptedActions(state)[actionId];
+  return Number.isSafeInteger(count) && count >= 0 ? count : null;
+}
+
+function activeDelegationCount(state) {
+  return Object.values(reservationsOf(state)).reduce((total, reservation) => {
+    const pendingCount = Number.isSafeInteger(reservation && reservation.pendingCount) && reservation.pendingCount >= 0
+      ? reservation.pendingCount
+      : 0;
+    const agentCount = Array.isArray(reservation && reservation.agentIds)
+      ? reservation.agentIds.length
+      : 0;
+    return total + pendingCount + agentCount;
+  }, 0);
+}
+
+function reserveDelegation(state, reservationId, actionId, count) {
+  if (typeof reservationId !== 'string' || !reservationId) throw new TypeError('reservationId must be a non-empty string.');
+  if (!Number.isSafeInteger(count) || count < 0) throw new TypeError('reservation count must be a non-negative safe integer.');
+  const reservations = reservationsOf(state);
+  if (reservations[reservationId]) return state;
+  const normalizedActionId = String(actionId || '');
+  const priorCount = acceptedActionCount(state, normalizedActionId);
+  if (priorCount !== null) return state;
+  const accepted = { ...acceptedActions(state) };
+  if (normalizedActionId) accepted[normalizedActionId] = count;
+  return {
+    ...state,
+    acceptedActions: accepted,
+    reservations: {
+      ...reservations,
+      [reservationId]: {
+        actionId: normalizedActionId,
+        asyncLaunched: null,
+        pendingCount: count,
+        agentIds: []
+      }
+    }
+  };
+}
+
+function markReservationAsync(state, reservationId, asyncLaunched) {
+  if (!reservationsOf(state)[reservationId] || typeof asyncLaunched !== 'boolean') return state;
+  const reservation = reservationsOf(state)[reservationId];
+  if (reservation.asyncLaunched === true || reservation.asyncLaunched === asyncLaunched) return state;
+  return {
+    ...state,
+    reservations: {
+      ...reservationsOf(state),
+      [reservationId]: { ...reservation, asyncLaunched }
+    }
+  };
+}
+
+function bindSubagent(state, agentId, reservationId) {
+  if (typeof agentId !== 'string' || !agentId) return state;
+  if (seenAgentIds(state).includes(agentId)) return state;
+  const reservations = reservationsOf(state);
+  const reservation = reservations[reservationId];
+  if (stoppedAgentIds(state).includes(agentId)) {
+    if (!reservation || !Number.isInteger(reservation.pendingCount) || reservation.pendingCount <= 0) return state;
+    const nextReservations = { ...reservations };
+    if (reservation.pendingCount === 1 && (!Array.isArray(reservation.agentIds) || reservation.agentIds.length === 0)) {
+      delete nextReservations[reservationId];
+    } else {
+      nextReservations[reservationId] = { ...reservation, pendingCount: reservation.pendingCount - 1 };
+    }
+    return {
+      ...state,
+      agentIdsSeen: [...new Set([...seenAgentIds(state), agentId])],
+      reservations: nextReservations
+    };
+  }
+  if (Object.values(reservations).some((reservation) => Array.isArray(reservation.agentIds) && reservation.agentIds.includes(agentId))) {
+    return state;
+  }
+  if (!reservation || !Number.isInteger(reservation.pendingCount) || reservation.pendingCount <= 0) return state;
+  return {
+    ...state,
+    agentIdsSeen: [...new Set([...seenAgentIds(state), agentId])],
+    reservations: {
+      ...reservations,
+      [reservationId]: {
+        ...reservation,
+        pendingCount: reservation.pendingCount - 1,
+        agentIds: [...(Array.isArray(reservation.agentIds) ? reservation.agentIds : []), agentId]
+      }
+    }
+  };
+}
+
+function releaseSubagent(state, agentId) {
+  if (typeof agentId !== 'string' || !agentId) return state;
+  const stopped = stoppedAgentIds(state);
+  const reservations = reservationsOf(state);
+  for (const [reservationId, reservation] of Object.entries(reservations)) {
+    const agentIds = Array.isArray(reservation.agentIds) ? reservation.agentIds : [];
+    if (!agentIds.includes(agentId)) continue;
+    const remainingAgents = agentIds.filter((value) => value !== agentId);
+    const nextReservations = { ...reservations };
+    if (reservation.pendingCount === 0 && remainingAgents.length === 0) {
+      delete nextReservations[reservationId];
+    } else {
+      nextReservations[reservationId] = { ...reservation, agentIds: remainingAgents };
+    }
+    return {
+      ...state,
+      stoppedAgentIds: [...new Set([...stopped, agentId])],
+      reservations: nextReservations
+    };
+  }
+  if (stopped.includes(agentId)) return state;
+  return { ...state, stoppedAgentIds: [...stopped, agentId] };
+}
+
+function releaseReservation(state, reservationId) {
+  if (typeof reservationId !== 'string' || !reservationId || !reservationsOf(state)[reservationId]) return state;
+  const reservations = { ...reservationsOf(state) };
+  delete reservations[reservationId];
+  return { ...state, reservations };
+}
+
+function clearDelegations(state) {
+  return { ...state, reservations: {} };
+}
+
+function reservationForAction(state, actionId) {
+  if (typeof actionId !== 'string' || !actionId) return null;
+  for (const [reservationId, reservation] of Object.entries(reservationsOf(state))) {
+    if (reservation && reservation.actionId === actionId) return reservationId;
+  }
+  return null;
+}
+
+// Callers consume this summary; reservation layout and deduplication stay here.
+function inspectDelegation(state, intent = {}) {
+  const acceptedCount = acceptedActionCount(state, intent.id);
+  const count = intent.delegationCount ?? 0;
+  return {
+    reservedUpperBound: activeDelegationCount(state),
+    unresolvedReasons: [...new Set(Object.values(state && state.unresolved || {}))],
+    unknownResults: Object.values(reservationsOf(state)).filter(value => value.resultUnknown).length,
+    alreadyReserved: acceptedCount !== null && acceptedCount === count,
+    duplicateActionConflict: acceptedCount !== null && acceptedCount !== count
+  };
+}
+
+function bindReportedAliases(state) {
+  let next = state;
+  for (const [id, reservation] of Object.entries(reservationsOf(state))) {
+    if (reservation.completionScope === 'call') continue;
+    for (const alias of reservation.reportedAliases || []) {
+      const agentId = state.agentAliases && state.agentAliases[alias];
+      if (agentId) next = bindSubagent(next, agentId, id);
+    }
+  }
+  return next;
+}
+
+function applyDelegationFact(state, fact) {
+  const actionId = fact.id;
+  const reservationId = reservationForAction(state, actionId);
+  if (fact.kind === 'accepted') {
+    if (acceptedActionCount(state, actionId) !== null) return state;
+    const id = `reservation:${actionId}`;
+    let next = reserveDelegation(state, id, actionId, fact.count);
+    next = { ...next, reservations: { ...next.reservations,
+      [id]: { ...next.reservations[id], completionScope: fact.completionScope || 'children' } } };
+    if (fact.uncertainty) next = { ...next, unresolved: { ...next.unresolved, [actionId]: fact.uncertainty } };
+    return next;
+  }
+  if (fact.kind === 'joined' || fact.kind === 'not_started') {
+    if (!reservationId && !Object.prototype.hasOwnProperty.call(state.unresolved || {}, actionId)) return state;
+    // A late denial cannot contradict an already observed execution.
+    const reservation = reservationsOf(state)[reservationId];
+    if (fact.kind === 'not_started' && reservation && (reservation.observedRunning || reservation.agentIds.length)) return state;
+    const unresolved = { ...state.unresolved };
+    delete unresolved[actionId];
+    return { ...releaseReservation(state, reservationId), unresolved };
+  }
+  if (fact.kind === 'running' || fact.kind === 'unknown') {
+    if (!reservationId) return state;
+    let next = state;
+    if (fact.agentId && state.reservations[reservationId].completionScope !== 'call') {
+      next = bindSubagent(next, fact.agentId, reservationId);
+    }
+    if (fact.agentAliases && next.reservations[reservationId]) {
+      next = { ...next, reservations: { ...next.reservations, [reservationId]: {
+        ...next.reservations[reservationId], reportedAliases: [...new Set(fact.agentAliases)] } } };
+      next = bindReportedAliases(next);
+    }
+    const reservation = next.reservations[reservationId];
+    if (!reservation) return next;
+    return { ...next, reservations: { ...next.reservations,
+      [reservationId]: { ...reservation,
+        observedRunning: reservation.observedRunning || fact.kind === 'running',
+        resultUnknown: fact.kind === 'unknown' } } };
+  }
+  if (fact.kind === 'child_started') {
+    if (fact.agentAlias && fact.agentId) {
+      state = bindReportedAliases({ ...state, agentAliases: { ...state.agentAliases, [fact.agentAlias]: fact.agentId } });
+    }
+    const reservation = reservationsOf(state)[fact.reservationId];
+    if (reservation && reservation.completionScope === 'call') return state;
+    return bindSubagent(state, fact.agentId, fact.reservationId);
+  }
+  if (fact.kind === 'child_stopped') return releaseSubagent(state, fact.agentId);
+  if (fact.kind === 'all_stopped') return { ...clearDelegations(state), unresolved: {} };
+  return state;
+}
+
+module.exports = {
+  inspectDelegation,
+  applyDelegationFact,
+  acceptedActionCount,
+  activeDelegationCount,
+  bindSubagent,
+  clearDelegations,
+  markReservationAsync,
+  releaseReservation,
+  releaseSubagent,
+  reserveDelegation,
+  reservationForAction
 };
 
 },
@@ -523,6 +1109,14 @@ module.exports = {
 'use strict';
 
 const nodePath = require('node:path');
+const { DEFAULT_AGENT_LIMIT } = __require("src/contracts.cjs");
+const { inspectDelegation } = __require("src/delegation-state.cjs");
+const { SHELL_ANALYSIS_REASONS, isShellAnalysisReason } = __require("src/control-protocol.cjs");
+
+function analysisExplanation(action) {
+  return isShellAnalysisReason(action.analysisReason)
+    ? ` ${SHELL_ANALYSIS_REASONS[action.analysisReason]}` : '';
+}
 
 function decision(outcome, family, reasonCode, explanation, nextStep) {
   return { outcome, family, reasonCode, explanation, nextStep };
@@ -572,12 +1166,37 @@ function pathAllowed(path, allowedPaths, cwd) {
   });
 }
 
-function decide({ contract, action, state = {} }) {
+function decide({ contract, action, state = {}, delegation = inspectDelegation(state.delegation) }) {
   const mode = contract.mode || 'unconfirmed';
   const level = contract.level || 'watch';
 
+  const delegationCount = action.mutability === 'delegate'
+    ? (Number.isInteger(action.delegationCount) ? action.delegationCount : 1)
+    : 0;
   if (level === 'off' || mode === 'unconfirmed') {
     return decision('allow', null, 'CONTROL_INACTIVE', 'No confirmed enforcing contract is active.', null);
+  }
+  if (action.mutability === 'delegate' && state.directiveError) {
+    return decision(
+      controlledOutcome(level),
+      'S',
+      'INVALID_DIRECTIVE',
+      `The active Stop That Shit directive is invalid: ${state.directiveError.message || state.directiveError.code || 'unknown directive error'}.`,
+      'Submit a corrected agents=N directive before delegating.'
+    );
+  }
+
+  const agentBudget = Number.isSafeInteger(contract.agentBudget) && contract.agentBudget >= 0
+    ? contract.agentBudget
+    : DEFAULT_AGENT_LIMIT;
+  if (action.legacyDelegationProtocol && agentBudget < DEFAULT_AGENT_LIMIT) {
+    return decision(
+      controlledOutcome(level),
+      'S',
+      'LIFECYCLE_PROTOCOL_REQUIRED',
+      'This adapter has no supported lifecycle declaration, so it cannot prove that delegation and resume actions obey the finite limit.',
+      'Update the host adapter and runtime together before using agents=N. Ordinary read and write actions remain available.'
+    );
   }
 
   const nonMutatingMode = ['answer', 'review', 'monitor'].includes(mode);
@@ -586,7 +1205,7 @@ function decide({ contract, action, state = {} }) {
       controlledOutcome(level),
       'I',
       'MODE_FORBIDS_MUTATION',
-      `Task mode ${mode} does not authorize repository mutation.`,
+      `Task mode ${mode} does not authorize repository mutation.${analysisExplanation(action)}`,
       'Report the finding, use a read-only action, or obtain an explicit change contract.'
     );
   }
@@ -596,7 +1215,7 @@ function decide({ contract, action, state = {} }) {
       controlledOutcome(level, 'require_user_approval'),
       'I',
       'MUTABILITY_UNPROVEN',
-      `The proposed action is not proven read-only under ${mode} mode.`,
+      `The proposed action is not proven read-only under ${mode} mode.${analysisExplanation(action)}`,
       'Use a clearly read-only command or obtain an explicit change contract.'
     );
   }
@@ -661,22 +1280,48 @@ function decide({ contract, action, state = {} }) {
       controlledOutcome(level),
       'S',
       'UNBOUNDED_DELEGATION',
-      'The proposed delegation can fan out to an unbounded number of subagents, so it cannot satisfy agents=N deterministically.',
-      'Use explicit observable Agent calls within agents=N or agents=allow, or disable the Guard for a deliberately unbounded workflow.'
+      'The proposed delegation can fan out to an unbounded number of subagents, so it cannot satisfy the configured agent limits deterministically.',
+      'Use an explicit bounded delegation batch, or disable the Guard for a deliberately unbounded workflow.'
     );
   }
 
-  const delegationCount = action.mutability === 'delegate'
-    ? (Number.isInteger(action.delegationCount) ? action.delegationCount : 1)
-    : 0;
-  if (action.mutability === 'delegate' && contract.agentPolicy !== 'allow'
-    && contract.agentsUsed + delegationCount > contract.agentBudget) {
+  if (action.mutability === 'delegate' && action.duplicateActionConflict) {
+    return decision(
+      controlledOutcome(level),
+      'S',
+      'DUPLICATE_ACTION_ID',
+      'The host reused an action identifier with a different delegation count, so the request cannot be charged safely.',
+      'Use a unique action identifier for each delegation call.'
+    );
+  }
+
+  const activeAgents = delegation.reservedUpperBound;
+  if (action.mutability === 'delegate' && delegation.unresolvedReasons.length > 0
+      && agentBudget < DEFAULT_AGENT_LIMIT) {
+    return decision(
+      controlledOutcome(level),
+      'S',
+      'DELEGATION_STATE_UNPROVEN',
+      `Earlier permitted activity has no proven bound: ${delegation.unresolvedReasons.join(', ')}.`,
+      'Wait for confirmed completion of the affected call. If the host cannot identify its completion, use a new session for a finite limit.'
+    );
+  }
+  if (action.delegationLifecycleUnproven && agentBudget < DEFAULT_AGENT_LIMIT) {
+    return decision(
+      controlledOutcome(level),
+      'S',
+      'DELEGATION_LIFECYCLE_UNPROVEN',
+      'This action can restart an existing agent, but the host does not identify each run in its completion events.',
+      'Use a new delegation call so agents=N can track its completion. Messaging and resuming remain available without a finite agent limit.'
+    );
+  }
+  if (action.mutability === 'delegate' && !action.alreadyReserved && activeAgents + delegationCount > agentBudget) {
     return decision(
       controlledOutcome(level),
       'S',
       'AGENT_BUDGET_EXHAUSTED',
-      `The active contract allows ${contract.agentBudget} subagent(s), with ${contract.agentsUsed} already used, and this action requires ${delegationCount}.`,
-      'Continue locally or obtain an explicit agents=N or agents=allow contract.'
+      `The session allows ${agentBudget} concurrently active subagent(s), with ${activeAgents} units reserved, and this action requires ${delegationCount}.`,
+      delegation.unknownResults ? 'A tool returned without proof that its child work ended. Collect a supported completion result before reusing its reserved capacity.' : 'Wait for the current delegation to complete or increase agents=N in a corrected directive.'
     );
   }
 
@@ -703,7 +1348,8 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const packageJson = __require("package.json");
-const { PROTOCOL_VERSION } = __require("src/control-protocol.cjs");
+const { PROTOCOL_VERSION, isShellAnalysisReason } = __require("src/control-protocol.cjs");
+const { inspectDelegation } = __require("src/delegation-state.cjs");
 const { readAnnotations } = __require("src/runtime-annotations.cjs");
 const { appendJsonl, readJsonl, runtimeRoot } = __require("src/runtime-storage.cjs");
 const { sessionKey } = __require("src/state.cjs");
@@ -719,6 +1365,7 @@ function eventPath(sessionId, options) {
 
 function recordDecision(facts, options = {}) {
   const contract = facts && facts.contract || {};
+  const delegation = facts && facts.delegation || {};
   const state = controlState(contract);
   if (state === 'off') return null;
 
@@ -737,6 +1384,7 @@ function recordDecision(facts, options = {}) {
     action: {
       toolName: String(action.name || 'unknown'),
       mutability: String(action.mutability || 'unknown'),
+      ...(isShellAnalysisReason(action.analysisReason) ? { analysisReason: action.analysisReason } : {}),
       delegationCount: Number.isInteger(action.delegationCount) ? action.delegationCount : 0,
       pathCount: Array.isArray(action.affectedPaths) ? action.affectedPaths.length : 0,
       hashIntent: Boolean(action.hashIntent),
@@ -746,9 +1394,9 @@ function recordDecision(facts, options = {}) {
     contract: {
       mode: String(contract.mode || 'unconfirmed'),
       level: String(contract.level || 'watch'),
-      agentPolicy: String(contract.agentPolicy || 'finite'),
-      agentBudget: Number.isInteger(contract.agentBudget) ? contract.agentBudget : 0,
-      agentsUsed: Number.isInteger(contract.agentsUsed) ? contract.agentsUsed : 0,
+      agentBudget: Number.isSafeInteger(contract.agentBudget) ? contract.agentBudget : Number.MAX_SAFE_INTEGER,
+      reservedUpperBound: inspectDelegation(delegation).reservedUpperBound,
+      countUnproven: inspectDelegation(delegation).unresolvedReasons.length > 0,
       hashPolicy: String(contract.hashPolicy || 'deny'),
       dependencyPolicy: String(contract.dependencyPolicy || 'ask'),
       allowedPathCount: Array.isArray(contract.allowedPaths) ? contract.allowedPaths.length : 0
@@ -834,7 +1482,7 @@ module.exports = { readRuntime, recordDecision };
 "package.json": function(module, exports, __require) {
 module.exports = {
   "name": "stop-that-shit",
-  "version": "0.2.1-shelios.2",
+  "version": "0.2.4-shelios.1",
   "private": true,
   "description": "Keep agent work bounded and reduce defensive wording in Codex, Claude Code, OpenCode, Hermes Agent CLI, and Pi",
   "keywords": [
@@ -850,6 +1498,7 @@ module.exports = {
     "./server": "./opencode/stop-that-shit.mjs"
   },
   "files": [
+    "server.mjs",
     "opencode/",
     "pi/",
     "src/",
@@ -862,7 +1511,10 @@ module.exports = {
     "INSTALL.md",
     "LICENSE",
     "PRIVACY.md",
-    "README.md"
+    "README.md",
+    "README_CN.md",
+    "README_EN.md",
+    "README_KO.md"
   ],
   "pi": {
     "extensions": [
@@ -879,7 +1531,7 @@ module.exports = {
     "pretest": "npm run schema:check",
     "hermes:build": "node scripts/build-hermes-plugin.cjs",
     "hermes:check": "node scripts/build-hermes-plugin.cjs --check",
-    "test": "node --test test/case-bundle.test.cjs test/claude-adapter.test.cjs test/claude-plugin.test.cjs test/contracts.test.cjs test/control-protocol.test.cjs test/decision.test.cjs test/hermes-adapter.test.cjs test/hermes-hook.test.cjs test/hermes-plugin-package.test.cjs test/hooks.test.cjs test/opencode-adapter.test.cjs test/opencode-plugin.test.cjs test/opencode-smoke.test.cjs test/paired-eval.test.cjs test/pi-adapter.test.cjs test/pi-extension.test.cjs test/pi-package.test.cjs test/plugin.test.cjs test/runtime-audit.test.cjs test/sts-cli.test.cjs test/stss-skill.test.cjs",
+    "test": "node --test test/case-bundle.test.cjs test/claude-adapter.test.cjs test/claude-plugin.test.cjs test/contracts.test.cjs test/control-protocol.test.cjs test/decision.test.cjs test/delegation-state.test.cjs test/delegation-lifecycle.test.cjs test/delegation-facts.test.cjs test/lifecycle-compatibility.test.cjs test/fork-migration.test.cjs test/hermes-adapter.test.cjs test/hermes-hook.test.cjs test/hermes-plugin-package.test.cjs test/hooks.test.cjs test/opencode-adapter.test.cjs test/opencode-plugin.test.cjs test/opencode-smoke.test.cjs test/opencode-v2-plugin.test.mjs test/opencode-dual-smoke.test.mjs test/paired-eval.test.cjs test/pi-adapter.test.cjs test/pi-extension.test.cjs test/pi-package.test.cjs test/plugin.test.cjs test/runtime-audit.test.cjs test/sts-cli.test.cjs test/stss-skill.test.cjs",
     "sts": "node scripts/sts.cjs",
     "eval": "node scripts/evaluate-cases.cjs",
     "eval:selftest": "node --test test/case-bundle.test.cjs test/paired-eval.test.cjs",
@@ -891,7 +1543,7 @@ module.exports = {
   },
   "engines": {
     "node": ">=18",
-    "opencode": ">=1.18.18"
+    "opencode": ">=1.18.18 <2 || >=2.0.18 <3"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
@@ -903,6 +1555,10 @@ module.exports = {
   },
   "devDependencies": {
     "ajv": "^8.20.0"
+  },
+  "dependencies": {
+    "@opencode/schema": "2.0.18",
+    "effect": "4.0.0-rc.112"
   }
 };
 },
@@ -999,6 +1655,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { defaultContract } = __require("src/contracts.cjs");
 
+const CURRENT_SCHEMA_VERSION = 4;
+
 function dataRoot(override) {
   return override || process.env.PLUGIN_DATA || process.env.CLAUDE_PLUGIN_DATA || path.join(os.tmpdir(), 'stop-that-shit-dev');
 }
@@ -1013,9 +1671,139 @@ function statePath(sessionId, override) {
 
 function freshState() {
   return {
-    schemaVersion: 1,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     contract: defaultContract(),
+    delegation: {
+      reservations: {},
+      agentIdsSeen: [],
+      stoppedAgentIds: [],
+      unresolved: {},
+      acceptedActions: {}
+    },
+    directiveWarning: null,
+    directiveError: null,
     lastPromptContext: null
+  };
+}
+
+function safeCount(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+function validAgentBudget(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function migratedAgentBudget(contract) {
+  if (contract.agentPolicy === 'allow') return Number.MAX_SAFE_INTEGER;
+  const legacyBudget = validAgentBudget(contract.agentBudget);
+  if (legacyBudget !== null) return legacyBudget;
+
+  const concurrentBudget = validAgentBudget(contract.concurrentAgentBudget);
+  if (concurrentBudget !== null && concurrentBudget !== Number.MAX_SAFE_INTEGER) return concurrentBudget;
+
+  const totalBudget = validAgentBudget(contract.totalAgentBudget);
+  if (totalBudget !== null && totalBudget !== Number.MAX_SAFE_INTEGER) return totalBudget;
+
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function normalizeDelegation(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const reservations = {};
+  if (source.reservations && typeof source.reservations === 'object') {
+    for (const [reservationId, reservation] of Object.entries(source.reservations)) {
+      if (!reservation || typeof reservation !== 'object') continue;
+      reservations[reservationId] = {
+        reportedAliases: Array.isArray(reservation.reportedAliases) ? reservation.reportedAliases.filter(value => typeof value === 'string' && value) : [],
+        completionScope: reservation.completionScope === 'call' ? 'call' : 'children',
+        observedRunning: reservation.observedRunning === true || reservation.asyncLaunched === true,
+        resultUnknown: reservation.resultUnknown === true,
+        actionId: typeof reservation.actionId === 'string' ? reservation.actionId : '',
+        asyncLaunched: typeof reservation.asyncLaunched === 'boolean' ? reservation.asyncLaunched : null,
+        pendingCount: safeCount(reservation.pendingCount),
+        agentIds: Array.isArray(reservation.agentIds)
+          ? [...new Set(reservation.agentIds.filter((agentId) => typeof agentId === 'string' && agentId))]
+          : []
+      };
+    }
+  }
+  const acceptedActions = source.acceptedActions && typeof source.acceptedActions === 'object'
+    ? Object.fromEntries(Object.entries(source.acceptedActions)
+      .filter(([actionId, count]) => typeof actionId === 'string' && actionId
+        && Number.isSafeInteger(count) && count >= 0))
+    : {};
+  for (const reservation of Object.values(reservations)) {
+    if (!reservation.actionId || Object.prototype.hasOwnProperty.call(acceptedActions, reservation.actionId)) continue;
+    acceptedActions[reservation.actionId] = reservation.pendingCount + reservation.agentIds.length;
+  }
+  return {
+    reservations,
+    agentIdsSeen: Array.isArray(source.agentIdsSeen)
+      ? [...new Set(source.agentIdsSeen.filter((agentId) => typeof agentId === 'string' && agentId))]
+      : [],
+    stoppedAgentIds: Array.isArray(source.stoppedAgentIds)
+      ? [...new Set(source.stoppedAgentIds.filter((agentId) => typeof agentId === 'string' && agentId))]
+      : [],
+    acceptedActions,
+    agentAliases: Object.fromEntries(Object.entries(source.agentAliases || {}).filter(([alias, id]) => alias && typeof id === 'string' && id)),
+    unresolved: Object.fromEntries(Object.entries(source.unresolved || {}).filter(([key, reason]) => key && typeof reason === 'string' && reason))
+  };
+}
+
+function normalizeState(parsed) {
+  const fresh = freshState();
+  const source = parsed && typeof parsed === 'object' ? parsed : {};
+  const legacyContract = source.contract && typeof source.contract === 'object' ? source.contract : {};
+  const contract = { ...fresh.contract, ...legacyContract };
+  delete contract.agentBudget;
+  contract.agentBudget = migratedAgentBudget(legacyContract);
+  delete contract.totalAgentBudget;
+  delete contract.concurrentAgentBudget;
+  delete contract.agentsUsed;
+  delete contract.agentPolicy;
+  delete contract.directiveWarning;
+  delete contract.directiveError;
+  const delegation = normalizeDelegation(source.delegation);
+  if (source.delegationLifecycleUnproven === true) delegation.unresolved['legacy:unproven'] = 'legacy_history_unverified';
+  // Older versions could erase running work or omit it from the ledger. Even
+  // an empty persisted ledger cannot establish a clean execution history.
+  if (source.schemaVersion === undefined || source.schemaVersion < CURRENT_SCHEMA_VERSION
+    || Object.prototype.hasOwnProperty.call(legacyContract, 'agentPolicy')) {
+    delegation.unresolved['legacy:history'] = 'legacy_history_unverified';
+  }
+  const directiveWarning = source.directiveWarning && typeof source.directiveWarning === 'object'
+    && source.directiveWarning.code !== 'DEPRECATED_AGENT_DIRECTIVE'
+    ? source.directiveWarning
+    : null;
+  const directiveError = source.directiveError && typeof source.directiveError === 'object'
+    && source.directiveError.code !== 'LEGACY_AGENT_DIRECTIVE'
+    ? source.directiveError
+    : null;
+  const hasCurrentContract = Object.prototype.hasOwnProperty.call(legacyContract, 'agentBudget')
+    && !Object.prototype.hasOwnProperty.call(legacyContract, 'totalAgentBudget')
+    && !Object.prototype.hasOwnProperty.call(legacyContract, 'concurrentAgentBudget')
+    && !Object.prototype.hasOwnProperty.call(legacyContract, 'agentsUsed');
+  const hasCurrentDelegation = source.delegation
+    && typeof source.delegation === 'object'
+    && Object.prototype.hasOwnProperty.call(source.delegation, 'reservations')
+    && Object.prototype.hasOwnProperty.call(source.delegation, 'agentIdsSeen')
+    && Object.prototype.hasOwnProperty.call(source.delegation, 'stoppedAgentIds')
+    && Object.prototype.hasOwnProperty.call(source.delegation, 'acceptedActions')
+    && !Object.prototype.hasOwnProperty.call(source.delegation, 'totalAgentsUsed');
+  const migrated = source.schemaVersion !== CURRENT_SCHEMA_VERSION
+    || Object.prototype.hasOwnProperty.call(legacyContract, 'agentPolicy')
+    || !hasCurrentContract
+    || !hasCurrentDelegation
+    || directiveWarning === null && source.directiveWarning !== null
+    || directiveError === null && source.directiveError !== null;
+  return {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    contract,
+    delegation,
+    directiveWarning,
+    directiveError,
+    lastPromptContext: migrated ? null : source.lastPromptContext ?? null
   };
 }
 
@@ -1023,11 +1811,9 @@ function readState(sessionId, override) {
   const file = statePath(sessionId, override);
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return {
-      ...freshState(),
-      ...parsed,
-      contract: { ...defaultContract(), ...(parsed.contract || {}) }
-    };
+    // Reads may run without the session lock. Normalize in memory only;
+    // the next locked mutation persists the current schema and latest ledger.
+    return normalizeState(parsed);
   } catch (error) {
     if (error && (error.code === 'ENOENT' || error.name === 'SyntaxError')) return freshState();
     throw error;
@@ -1110,7 +1896,17 @@ function withSessionLock(sessionId, override, fn, options) {
   }
 }
 
+function updateSession(sessionId, override, update) {
+  return withSessionLock(sessionId, override, () => {
+    const state = readState(sessionId, override);
+    const result = update(state);
+    writeState(sessionId, state, override);
+    return result;
+  });
+}
+
 module.exports = {
+  updateSession,
   acquireSessionLock,
   dataRoot,
   freshState,
@@ -1127,6 +1923,7 @@ module.exports = {
 
 const nodePath = require('node:path');
 const {
+  analyzeCodexTool,
   classifyShell,
   detectDependencyIntent: detectCodexDependencyIntent,
   detectHashIntent: detectCodexHashIntent
@@ -1153,7 +1950,14 @@ function isHermesDelegationControl(toolName, toolInput) {
 function countHermesDelegation(toolName, toolInput) {
   if (toolName !== 'delegate_task' || isHermesDelegationControl(toolName, toolInput)) return 0;
   const input = toolInput && typeof toolInput === 'object' ? toolInput : {};
-  if (Array.isArray(input.tasks)) return input.tasks.length;
+  let tasks = input.tasks;
+  // Match Hermes' task-list normalization: recover only JSON arrays; an empty
+  // array falls back to goal. Invalid strings are rejected before any spawn.
+  if (typeof tasks === 'string') {
+    try { tasks = JSON.parse(tasks); } catch { return 0; }
+    if (!Array.isArray(tasks)) return 0;
+  }
+  if (Array.isArray(tasks) && tasks.length) return tasks.length;
   if (typeof input.goal === 'string' && input.goal.trim()) return 1;
   return 0;
 }
@@ -1311,7 +2115,19 @@ function detectHashIntent(toolName, toolInput) {
   return detectCodexHashIntent(codexToolName(toolName, toolInput), codexIntentInput(toolName, toolInput));
 }
 
+function analyzeHermesTool(toolName, toolInput, cwd) {
+  const analysis = toolName === 'terminal'
+    ? analyzeCodexTool('exec_command', codexIntentInput(toolName, toolInput), cwd)
+    : {
+      mutability: classifyHermesTool(toolName, toolInput),
+      hashIntent: detectHashIntent(toolName, toolInput),
+      dependencyIntent: detectDependencyIntent(toolName, toolInput)
+    };
+  return { ...analysis, affectedPaths: extractAffectedPaths(toolName, toolInput, cwd) };
+}
+
 module.exports = {
+  analyzeHermesTool,
   classifyHermesTool,
   countHermesDelegation,
   extractAffectedPaths,
@@ -1328,7 +2144,15 @@ const nodePath = require('node:path');
 
 const WRITE_NAME = /(?:^|__|_)(?:add|append|apply|archive|close|commit|copy|create|delete|deploy|edit|install|merge|move|patch|post|publish|push|remove|rename|send|set|submit|update|upload|write)(?:$|__|_)/i;
 const READ_NAME = /(?:^|__|_)(?:cat|check|diff|fetch|find|get|inspect|list|load|open|read|review|search|show|status|view)(?:$|__|_)/i;
-const CONTROL_TOOLS = new Set(['update_plan', 'request_user_input', 'wait', 'wait_agent']);
+const CONTROL_TOOLS = new Set(['update_plan', 'request_user_input', 'wait', 'wait_agent', 'interrupt_agent', 'close_agent']);
+// Match the host's known flattened namespaces exactly; do not strip arbitrary
+// prefixes from MCP or third-party tool names.
+const CODEX_TOOL_NAMES = new Map([
+  ...['send_input', 'resume_agent', 'wait_agent', 'close_agent']
+    .map(name => [`multi_agent_v1${name}`, name]),
+  ...['spawn_agent', 'followup_task', 'send_message', 'list_agents', 'wait_agent', 'interrupt_agent']
+    .map(name => [`collaboration${name}`, name])
+]);
 const CODE_PATH = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|cs|php|rb|c|cc|cpp|h|hpp)$/i;
 const HASH_COMMAND = /\b(?:Get-FileHash|md5sum|sha(?:1|224|256|384|512)sum|shasum|b2sum)\b|\bcertutil\b[^\r\n]*\s-hashfile\b|\bopenssl\s+dgst\b/i;
 const HASH_API = /\b(?:createHash|createHmac)\s*\(|\bcrypto\.subtle\.digest\s*\(|\bhashlib\.(?:md5|sha1|sha224|sha256|sha384|sha512|blake2[bs])\s*\(|\bMessageDigest\.getInstance\s*\(|\bDigestUtils\.[A-Za-z0-9_]+\s*\(|\bsha(?:1|256|512)\.(?:New|Sum\w*)\s*\(|\b(?:bcrypt|argon2)\.hash\s*\(|\bpassword_hash\s*\(|\bPasswordHasher\s*\(/i;
@@ -1346,7 +2170,7 @@ function detectHashIntent(toolName, toolInput) {
   if (!text) return false;
 
   if (name === 'Bash' || name === 'exec_command' || name === 'shell_command') {
-    return HASH_COMMAND.test(text);
+    return analyzeShell(text).hashIntent;
   }
 
   if (name === 'apply_patch') {
@@ -1418,7 +2242,7 @@ function detectDependencyIntent(toolName, toolInput) {
   const name = String(toolName || '');
   const text = inputText(toolInput);
   if (name === 'Bash' || name === 'exec_command' || name === 'shell_command') {
-    return DEPENDENCY_COMMAND.test(text);
+    return analyzeShell(text).dependencyIntent;
   }
   if (name === 'apply_patch') {
     const manifest = /(?:^|\/)(?:package\.json|pyproject\.toml|requirements[^/]*\.txt|Cargo\.toml|go\.mod|composer\.json|Gemfile)$/i;
@@ -1430,23 +2254,280 @@ function detectDependencyIntent(toolName, toolInput) {
   return false;
 }
 
+function classifyGitBranchArguments(args) {
+  let listing = false, positional = false;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--') { positional ||= i + 1 < args.length; break; }
+    if (!arg.startsWith('-')) { positional = true; continue; }
+    if (/^(?:-[a-zA-Z]*[dDmMcCf][a-zA-Z]*|--(?:delete|move|copy|force|edit-description|set-upstream-to|unset-upstream|track|no-track|create-reflog)(?:=.*)?)$/.test(arg)) return 'write';
+    if (arg === '--list' || /^-[alrv]+$/.test(arg)) {
+      listing ||= arg === '--list' || arg.includes('l');
+      continue;
+    }
+    if (/^--(?:contains|no-contains|merged|no-merged)(?:=.*)?$/.test(arg)) {
+      listing = true;
+      if (!arg.includes('=') && args[i + 1] && !args[i + 1].startsWith('-')) i++;
+      continue;
+    }
+    if (/^--(?:points-at|format|sort)(?:=.*)?$/.test(arg)) {
+      listing ||= arg === '--points-at' || arg.startsWith('--points-at=');
+      if (!arg.includes('=')) {
+        if (i + 1 === args.length) return 'unknown';
+        i++;
+      }
+      continue;
+    }
+    if (/^--(?:show-current|all|remotes|verbose|no-color|column|no-column|ignore-case|omit-empty|no-abbrev)$/.test(arg)
+        || /^--(?:color=(?:always|never|auto)|abbrev(?:=\d+)?|column=.+)$/.test(arg)) continue;
+    // Negation and abbreviations can cancel --list or select a mutation.
+    return 'unknown';
+  }
+  return positional && !listing ? 'unknown' : 'read';
+}
+
+const READ_POWERSHELL_COMMANDS = new Set([
+  'get-content', 'get-childitem', 'get-item', 'test-path', 'resolve-path',
+  'select-string', 'select-object', 'measure-object', 'compare-object', 'where-object'
+]);
+const READ_SHELL_COMMANDS = new Set([
+  ...READ_POWERSHELL_COMMANDS,
+  'rg', 'grep', 'findstr', 'cat', 'ls', 'dir', 'pwd', 'head', 'tail', 'wc', 'type'
+]);
+const WRITE_SHELL_COMMANDS = new Set([
+  'remove-item', 'move-item', 'copy-item', 'set-content', 'add-content', 'out-file',
+  'new-item', 'rm', 'del', 'erase', 'rmdir', 'mv', 'cp', 'touch', 'mkdir', 'tee', 'apply_patch'
+]);
+
+// Analyze only static words, literal quotes and simple command chains. The
+// hook does not expose a shell AST. Expansions, script blocks and ambiguous
+// escapes stay unknown instead of being interpreted as Bash or PowerShell.
+function staticShellCommands(text) {
+  const commands = [];
+  let args = [], word = '', inWord = false, quote = null, separator = null;
+  let nativeQuotes = false;
+  const finishWord = () => {
+    if (inWord) args.push(word);
+    word = ''; inWord = false;
+  };
+  const finishCommand = () => {
+    commands.push({ args, nativeQuotes });
+    args = []; nativeQuotes = false;
+  };
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i], next = text[i + 1];
+    // PowerShell recognizes these quotes; Bash treats them as ordinary text.
+    // They are literal only inside a quote of the opposite kind.
+    const smartQuote = /[\u2018-\u201b]/.test(char) ? "'"
+      : /[\u201c-\u201e]/.test(char) ? '"' : null;
+    if (smartQuote && (!quote || quote === smartQuote)) return null;
+    if (quote) {
+      // Legacy PowerShell native argv can split embedded double quotes back
+      // into options. Cmdlets receive the literal argument directly.
+      if (quote === "'" && char === '"' || quote === '"' && char === '"' && next === '"') nativeQuotes = true;
+      if (char === quote) { quote = null; continue; }
+      if (quote === '"' && (char === '$' || char === '`'
+          || char === '\\' && /["$`\\\r\n]/.test(next || ''))) return null;
+      word += char;
+      continue;
+    }
+    if (char === "'" || char === '"') { quote = char; inWord = true; continue; }
+    if (/[ \t]/.test(char)) { finishWord(); continue; }
+    if (char === '>') return { redirected: true };
+    if (/[$`{}()<@%*?\[\]#]/.test(char)) return null;
+    // Bash removes even an escape before an ordinary letter (e.g. --out\put).
+    // Without a shell identity, do not interpret an unquoted backslash.
+    if (char === '\\') return null;
+    if (char === '\r' || char === '\n' || char === ';' || char === '|' || char === '&') {
+      finishWord();
+      // PowerShell also accepts a standalone CR as a command separator.
+      const operator = char === '\r' ? '\n'
+        : (char === '&' || char === '|') && next === char ? char + text[++i] : char;
+      if (operator === '&') return null;
+      if (args.length) finishCommand();
+      else if (operator === '\n') continue;
+      else return null;
+      separator = operator;
+      continue;
+    }
+    if (/\s/.test(char)) return null;
+    word += char; inWord = true;
+  }
+  if (quote) return null;
+  finishWord();
+  if (args.length) finishCommand();
+  else if (['&&', '||', '|'].includes(separator)) return null;
+  return commands.length ? { commands } : null;
+}
+
+// Consume ripgrep option values before interpreting -- or executable options.
+// Otherwise a pattern named -- can hide a later --hostname-bin, or an option
+// name used as a literal pattern can be mistaken for an executable option.
+const RIPGREP_VALUE_OPTIONS = new Set([
+  '--regexp', '--file', '--pre-glob', '--dfa-size-limit', '--encoding', '--engine',
+  '--max-count', '--regex-size-limit', '--threads', '--glob', '--iglob',
+  '--ignore-file', '--max-depth', '--max-filesize', '--type', '--type-not',
+  '--type-add', '--type-clear', '--after-context', '--before-context', '--color',
+  '--colors', '--context', '--context-separator', '--field-context-separator',
+  '--field-match-separator', '--hyperlink-format', '--max-columns',
+  '--path-separator', '--replace', '--sort', '--sortr', '--generate'
+]);
+
+function classifyRipgrepArguments(args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--') break;
+    if (/^--(?:pre|hostname-bin)(?:=|$)/.test(arg)) return shellClassification('unknown', 'shell_execution_option');
+    let consumesValue = RIPGREP_VALUE_OPTIONS.has(arg);
+    if (/^-[^-]/.test(arg)) {
+      // A value can be attached to a short option, including in a flag cluster.
+      const valueFlag = /[efEmjgdtTABCMr]/.exec(arg.slice(1));
+      consumesValue = Boolean(valueFlag && valueFlag.index === arg.length - 2);
+    }
+    if (consumesValue && ++i === args.length) return shellClassification('unknown', 'option_value_missing');
+  }
+  return shellClassification('read');
+}
+
+function shellClassification(mutability, analysisReason) {
+  return { mutability, ...(analysisReason ? { analysisReason } : {}) };
+}
+
+function combineClassifications(classifications) {
+  const kinds = classifications.map(result => result.mutability);
+  const mutability = kinds.includes('write') ? 'write'
+    : kinds.every(kind => kind === 'read') ? 'read' : 'unknown';
+  const decisive = classifications.find(result => result.mutability === mutability);
+  return shellClassification(mutability, decisive?.analysisReason);
+}
+
+function classifyStaticCommand({ args: [program, ...args], nativeQuotes }) {
+  const name = String(program || '').toLowerCase();
+  if (WRITE_SHELL_COMMANDS.has(name)) return shellClassification('write');
+  const cmdlet = READ_POWERSHELL_COMMANDS.has(name);
+  if (nativeQuotes && !cmdlet) return shellClassification('unknown', 'native_quotes_unproven');
+  const classifications = [classifyCommandArguments(name, [...args])];
+  // Legacy PowerShell drops empty native argv entries. A read must remain a
+  // read in both interpretations; cmdlets receive their arguments directly.
+  if (!cmdlet && args.includes('')) classifications.push(classifyCommandArguments(name, args.filter(arg => arg !== '')));
+  const result = combineClassifications(classifications);
+  if (classifications.some(entry => entry.mutability !== result.mutability)) result.analysisReason = 'native_empty_arguments';
+  return result;
+}
+
+function analyzeShell(command) {
+  const text = String(command || '').replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
+  const analysis = staticShellCommands(text);
+  if (!analysis || analysis.redirected) return {
+    ...shellClassification(analysis?.redirected ? 'write' : 'unknown', analysis?.redirected ? 'shell_redirection' : 'shell_syntax_unproven'),
+    hashIntent: HASH_COMMAND.test(text), dependencyIntent: DEPENDENCY_COMMAND.test(text)
+  };
+  const commands = analysis.commands.map(command => ({
+    ...classifyStaticCommand(command), text: command.args.join(' ')
+  }));
+  // Proven reads treat their arguments as data. Keep the existing intent checks
+  // for writes and unproven programs, independently for each command in a chain.
+  return {
+    ...combineClassifications(commands),
+    hashIntent: commands.some(command => command.mutability !== 'read' && HASH_COMMAND.test(command.text)),
+    dependencyIntent: commands.some(command => command.mutability !== 'read' && DEPENDENCY_COMMAND.test(command.text))
+  };
+}
+
+// Required values consume the following argument, even when it is --. Optional
+// values must be attached with =. Unknown options cannot establish a read.
+const GIT_QUERY_VALUE_OPTIONS = new Set([
+  '--word-diff-regex', '--src-prefix', '--dst-prefix', '--line-prefix',
+  '--output-indicator-new', '--output-indicator-old', '--output-indicator-context',
+  '--diff-algorithm', '--anchored', '--ignore-matching-lines', '--diff-filter',
+  '--stat-width', '--stat-name-width', '--stat-graph-width', '--stat-count',
+  '--inter-hunk-context', '--rotate-to', '--skip-to', '--find-object'
+]);
+const GIT_QUERY_FLAGS = new Set([
+  '--short', '--branch', '--show-stash', '--no-index', '--numstat', '--shortstat',
+  '--name-only', '--name-status', '--check', '--summary', '--patch', '--no-patch',
+  '--raw', '--binary', '--cached', '--staged', '--exit-code', '--quiet',
+  '--no-color', '--no-ext-diff', '--no-textconv', '--ignore-all-space',
+  '--ignore-space-change', '--ignore-space-at-eol', '--ignore-cr-at-eol',
+  '--ignore-blank-lines', '--patience', '--histogram', '--minimal',
+  '--oneline', '--all', '--reverse', '--first-parent', '--no-merges', '--merges',
+  '--graph', '--no-decorate', '--topo-order', '--date-order', '--no-renames',
+  '--pickaxe-all', '--pickaxe-regex', '--no-prefix', '--default-prefix',
+  '--show-toplevel', '--show-prefix', '--show-cdup', '--git-dir', '--git-common-dir',
+  '--is-inside-work-tree', '--is-bare-repository', '--verify', '--symbolic-full-name'
+]);
+const GIT_QUERY_OPTIONAL_VALUES = new Set([
+  '--stat', '--color', '--word-diff', '--color-words', '--relative', '--unified',
+  '--abbrev', '--short', '--abbrev-ref', '--porcelain', '--untracked-files', '--ignored',
+  '--find-renames', '--find-copies', '--break-rewrites', '--decorate', '--pretty'
+]);
+const GIT_QUERY_ATTACHED_ONLY = new Set([
+  '--format', '--date', '--since', '--until', '--before', '--after', '--author',
+  '--committer', '--grep', '--max-count', '--skip', '--diff-merges', '--encoding'
+]);
+
+function classifyGitQueryArguments(args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--') break;
+    if (!arg.startsWith('-')) continue;
+    if (/^--output(?:=|$)/.test(arg)) return shellClassification('write', 'git_output_file');
+    const name = arg.split('=', 1)[0];
+    if (GIT_QUERY_VALUE_OPTIONS.has(name)) {
+      if (arg === name && ++i === args.length) return shellClassification('unknown', 'option_value_missing');
+      continue;
+    }
+    if (GIT_QUERY_FLAGS.has(arg) || GIT_QUERY_OPTIONAL_VALUES.has(name)
+        || arg.includes('=') && GIT_QUERY_ATTACHED_ONLY.has(name)) continue;
+    if (/^-[SGOIn]$/.test(arg)) {
+      if (++i === args.length) return shellClassification('unknown', 'option_value_missing');
+      continue;
+    }
+    if (/^-[SGOI].+/.test(arg) || /^-n\d+$/.test(arg) || /^-\d+$/.test(arg)
+        || /^-[pwsbz]+$/.test(arg) || /^-[UMCB](?:\d+%?)?$/.test(arg)
+        || /^-u(?:no|normal|all)?$/.test(arg)) continue;
+    return shellClassification('unknown', 'git_arguments_unproven');
+  }
+  return shellClassification('read');
+}
+
+function classifyCommandArguments(name, args) {
+  if (name === 'git') {
+    // Only these global options preserve the supported command interpretation.
+    while (args.length) {
+      if (args[0] === '--no-pager' || args[0] === '--literal-pathspecs') args.shift();
+      else if (args[0] === '-C' && args.length > 1) args.splice(0, 2);
+      else break;
+    }
+    const subcommand = args.shift();
+    if (['add', 'commit', 'push', 'merge', 'rebase', 'checkout', 'switch', 'reset', 'restore', 'clean', 'tag'].includes(subcommand)) return shellClassification('write');
+    if (subcommand === 'branch') {
+      const mutability = classifyGitBranchArguments(args);
+      return shellClassification(mutability, mutability === 'unknown' ? 'git_arguments_unproven' : undefined);
+    }
+    if (['status', 'diff', 'log', 'show', 'rev-parse'].includes(subcommand)) return classifyGitQueryArguments(args);
+    return shellClassification('unknown', 'git_arguments_unproven');
+  }
+  if (['npm', 'pnpm', 'yarn'].includes(name) && ['add', 'install', 'remove', 'uninstall', 'publish'].includes(args[0])) return shellClassification('write');
+  if (['pip', 'pip3'].includes(name) && args[0] === 'install') return shellClassification('write');
+  if (name === 'gh' && /^(?:pr (?:create|merge|close)|issue (?:create|close)|release create)$/.test(args.slice(0, 2).join(' '))) return shellClassification('write');
+  if (name === 'rg') return classifyRipgrepArguments(args);
+  if (READ_SHELL_COMMANDS.has(name)) return shellClassification('read');
+  if (['node', 'python', 'python3', 'py'].includes(name) && args.length === 1 && args[0] === '--version') return shellClassification('read');
+  return shellClassification('unknown', 'shell_command_unproven');
+}
+
 function classifyShell(command) {
-  const text = String(command || '').trim();
-  if (!text) return 'unknown';
+  return analyzeShell(command).mutability;
+}
 
-  const writePattern = /\b(?:Remove-Item|Move-Item|Copy-Item|Set-Content|Add-Content|Out-File|New-Item|rm|del|erase|rmdir|mv|cp|touch|mkdir|tee|apply_patch)\b|\bgit\s+(?:add|commit|push|merge|rebase|checkout|switch|reset|clean|tag)\b|\b(?:npm|pnpm|yarn)\s+(?:add|install|remove|uninstall|publish)\b|\bpip\s+install\b|\bgh\s+(?:pr\s+(?:create|merge|close)|issue\s+(?:create|close)|release\s+create)\b/i;
-  const redirection = /(^|[^<])>{1,2}\s*[^&]/;
-  if (writePattern.test(text) || redirection.test(text)) return 'write';
-
-  const dynamicProgram = /\b(?:node|python|python3|py|ruby|perl)\s+(?!-{1,2}version\b)(?:-e|-c|[^-\s][^\s]*)/i;
-  if (dynamicProgram.test(text)) return 'unknown';
-
-  const readPattern = /\b(?:Get-Content|Get-ChildItem|Get-Item|Test-Path|Resolve-Path|Select-String|Measure-Object|Compare-Object|Where-Object|ForEach-Object|rg|grep|findstr|cat|ls|dir|pwd|head|tail|wc|type)\b|\bgit\s+(?:status|diff|log|show|rev-parse|branch)\b|\b(?:node|python|python3|py)\s+--version\b/i;
-  return readPattern.test(text) ? 'read' : 'unknown';
+function canonicalCodexToolName(toolName) {
+  const name = String(toolName || '');
+  return CODEX_TOOL_NAMES.get(name) || name;
 }
 
 function classifyCodexTool(toolName, toolInput) {
-  const name = String(toolName || '');
+  const name = canonicalCodexToolName(toolName);
   if (name === 'apply_patch' || name === 'Edit' || name === 'Write') return 'write';
   if (name === 'Bash' || name === 'exec_command' || name === 'shell_command') {
     return classifyShell(toolInput && toolInput.command);
@@ -1458,13 +2539,65 @@ function classifyCodexTool(toolName, toolInput) {
   return 'unknown';
 }
 
-module.exports = { classifyCodexTool, classifyShell, detectDependencyIntent, detectHashIntent, extractAffectedPaths };
+function analyzeCodexTool(toolName, toolInput, cwd) {
+  const name = canonicalCodexToolName(toolName);
+  let analysis;
+  if (name === 'Bash' || name === 'exec_command' || name === 'shell_command') {
+    const command = toolInput && toolInput.command;
+    analysis = analyzeShell(command);
+    // Preserve the legacy intent fallback for inputs without a command field.
+    // Normal shell inputs share the same analysis for all three decisions.
+    const text = inputText(toolInput);
+    if (text !== String(command || '')) {
+      const intents = analyzeShell(text);
+      analysis.hashIntent = intents.hashIntent;
+      analysis.dependencyIntent = intents.dependencyIntent;
+    }
+  } else {
+    analysis = {
+      mutability: classifyCodexTool(name, toolInput),
+      hashIntent: detectHashIntent(name, toolInput),
+      dependencyIntent: detectDependencyIntent(name, toolInput)
+    };
+  }
+  return { ...analysis, affectedPaths: extractAffectedPaths(name, toolInput, cwd) };
+}
+
+module.exports = { analyzeCodexTool, analyzeShell, canonicalCodexToolName, classifyCodexTool, classifyShell, detectDependencyIntent, detectHashIntent, extractAffectedPaths };
+
+},
+"src/adapters/lifecycle-fields.cjs": function(module, exports, __require) {
+'use strict';
+
+const ASYNC_FIELDS = [
+  'async_launched',
+  'asyncLaunched',
+  'run_in_background',
+  'runInBackground',
+  'background'
+];
+
+function readAsyncLaunched(...sources) {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    for (const field of ASYNC_FIELDS) {
+      if (typeof source[field] === 'boolean') return source[field];
+    }
+  }
+  return null;
+}
+
+function optionalIdentifier(...values) {
+  return values.find((value) => typeof value === 'string' && value.trim()) || null;
+}
+
+module.exports = { optionalIdentifier, readAsyncLaunched };
 
 }
 };
 __modules["package.json"] = function(module) { module.exports = {
   "name": "stop-that-shit",
-  "version": "0.2.1-shelios.2",
+  "version": "0.2.4-shelios.1",
   "private": true,
   "description": "Keep agent work bounded and reduce defensive wording in Codex, Claude Code, OpenCode, Hermes Agent CLI, and Pi",
   "keywords": [
@@ -1480,6 +2613,7 @@ __modules["package.json"] = function(module) { module.exports = {
     "./server": "./opencode/stop-that-shit.mjs"
   },
   "files": [
+    "server.mjs",
     "opencode/",
     "pi/",
     "src/",
@@ -1492,7 +2626,10 @@ __modules["package.json"] = function(module) { module.exports = {
     "INSTALL.md",
     "LICENSE",
     "PRIVACY.md",
-    "README.md"
+    "README.md",
+    "README_CN.md",
+    "README_EN.md",
+    "README_KO.md"
   ],
   "pi": {
     "extensions": [
@@ -1509,7 +2646,7 @@ __modules["package.json"] = function(module) { module.exports = {
     "pretest": "npm run schema:check",
     "hermes:build": "node scripts/build-hermes-plugin.cjs",
     "hermes:check": "node scripts/build-hermes-plugin.cjs --check",
-    "test": "node --test test/case-bundle.test.cjs test/claude-adapter.test.cjs test/claude-plugin.test.cjs test/contracts.test.cjs test/control-protocol.test.cjs test/decision.test.cjs test/hermes-adapter.test.cjs test/hermes-hook.test.cjs test/hermes-plugin-package.test.cjs test/hooks.test.cjs test/opencode-adapter.test.cjs test/opencode-plugin.test.cjs test/opencode-smoke.test.cjs test/paired-eval.test.cjs test/pi-adapter.test.cjs test/pi-extension.test.cjs test/pi-package.test.cjs test/plugin.test.cjs test/runtime-audit.test.cjs test/sts-cli.test.cjs test/stss-skill.test.cjs",
+    "test": "node --test test/case-bundle.test.cjs test/claude-adapter.test.cjs test/claude-plugin.test.cjs test/contracts.test.cjs test/control-protocol.test.cjs test/decision.test.cjs test/delegation-state.test.cjs test/delegation-lifecycle.test.cjs test/delegation-facts.test.cjs test/lifecycle-compatibility.test.cjs test/fork-migration.test.cjs test/hermes-adapter.test.cjs test/hermes-hook.test.cjs test/hermes-plugin-package.test.cjs test/hooks.test.cjs test/opencode-adapter.test.cjs test/opencode-plugin.test.cjs test/opencode-smoke.test.cjs test/opencode-v2-plugin.test.mjs test/opencode-dual-smoke.test.mjs test/paired-eval.test.cjs test/pi-adapter.test.cjs test/pi-extension.test.cjs test/pi-package.test.cjs test/plugin.test.cjs test/runtime-audit.test.cjs test/sts-cli.test.cjs test/stss-skill.test.cjs",
     "sts": "node scripts/sts.cjs",
     "eval": "node scripts/evaluate-cases.cjs",
     "eval:selftest": "node --test test/case-bundle.test.cjs test/paired-eval.test.cjs",
@@ -1521,7 +2658,7 @@ __modules["package.json"] = function(module) { module.exports = {
   },
   "engines": {
     "node": ">=18",
-    "opencode": ">=1.18.18"
+    "opencode": ">=1.18.18 <2 || >=2.0.18 <3"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
@@ -1533,6 +2670,10 @@ __modules["package.json"] = function(module) { module.exports = {
   },
   "devDependencies": {
     "ajv": "^8.20.0"
+  },
+  "dependencies": {
+    "@opencode/schema": "2.0.18",
+    "effect": "4.0.0-rc.112"
   }
 }; };
 const __cache = new Map();

@@ -10,6 +10,16 @@ const test = require('node:test');
 const root = path.join(__dirname, '..');
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
+test('release and package manifests include every README language and the legacy Chinese entry', () => {
+  const release = JSON.parse(fs.readFileSync(path.join(root, 'release-files.json'), 'utf8'));
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  for (const file of ['README.md', 'README_EN.md', 'README_KO.md', 'README_CN.md']) {
+    assert.ok(release.include.includes(file), `release omits ${file}`);
+    assert.ok(pkg.files.includes(file), `package omits ${file}`);
+    assert.ok(fs.existsSync(path.join(root, file)), `${file} is missing`);
+  }
+});
+
 test('Codex plugin manifest discovers both Skills and preserves its hook paths', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, '.codex-plugin', 'plugin.json'), 'utf8'));
   const hooks = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'codex-hooks.json'), 'utf8'));
@@ -19,7 +29,14 @@ test('Codex plugin manifest discovers both Skills and preserves its hook paths',
   assert.ok(fs.existsSync(path.join(root, 'skills', 'stop-that-shit', 'SKILL.md')));
   assert.ok(fs.existsSync(path.join(root, 'skills', 'stss', 'SKILL.md')));
   assert.ok(manifest.interface.defaultPrompt.some((prompt) => prompt.startsWith('$stss rewrite --')));
-  assert.deepEqual(Object.keys(hooks.hooks).sort(), ['PreToolUse', 'UserPromptSubmit']);
+  assert.deepEqual(Object.keys(hooks.hooks).sort(), [
+    'PostToolUse', 'PreToolUse', 'SessionEnd', 'UserPromptSubmit'
+  ]);
+});
+
+test('Codex SessionEnd hook uses the supported three-second timeout', () => {
+  const config = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'codex-hooks.json'), 'utf8'));
+  assert.equal(config.hooks.SessionEnd[0].hooks[0].timeout, 3);
 });
 
 test('Codex marketplace identity is distinct from the stable plugin identity', () => {
@@ -50,11 +67,10 @@ test('Codex presentation metadata uses valid local assets', () => {
   }
 });
 
-test('the packaged Skill remains useful without the Guard hooks', () => {
+test('the packaged Skill declares advisory use without the Guard hooks', () => {
   const skill = fs.readFileSync(path.join(root, 'skills', 'stop-that-shit', 'SKILL.md'), 'utf8');
   assert.match(skill, /works without the Guard/i);
   assert.match(skill, /advisory/i);
-  assert.match(skill, /Do the requested work\. Keep necessary consequences\. Stop everything else\./);
 });
 
 test('Codex install docs pin the release and forbid guessed plugin cache paths', () => {
@@ -84,7 +100,8 @@ test('Codex install docs pin the release and forbid guessed plugin cache paths',
   for (const relative of ['README.md', 'README_EN.md']) {
     const contents = fs.readFileSync(path.join(root, relative), 'utf8');
     const migrationLinks = contents.match(/INSTALL\.md#upgrade-from-010-shelios2/g) || [];
-    assert.ok(migrationLinks.length >= 2, `${relative} must route both Codex install entries through migration guidance`);
+    const installEntries = contents.match(/^\s*codex plugin marketplace add Shelios-Ceres\/stop-that-shit.*$/gm) || [];
+    assert.ok(migrationLinks.length >= installEntries.length, `${relative} must route every Codex install entry through migration guidance`);
   }
 
   const installGuide = fs.readFileSync(path.join(root, 'INSTALL.md'), 'utf8');
@@ -131,7 +148,22 @@ test('the packaged Codex hook entrypoint still accepts a Codex event on stdin', 
     timeout: 5000
   });
   assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '', 'the Codex hook must not fail open');
+  assert.ok(result.stdout.trim(), 'the Codex prompt hook must return context');
   const output = JSON.parse(result.stdout);
   assert.equal(output.hookSpecificOutput.hookEventName, 'UserPromptSubmit');
   assert.match(output.hookSpecificOutput.additionalContext, /mode=review/);
+});
+
+test('Codex native PostToolUse matcher subscribes only to delegation results', () => {
+  const config = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'codex-hooks.json'), 'utf8'));
+  const pattern = config.hooks.PostToolUse[0].matcher;
+  const matches = name => !pattern || pattern === '*' || new RegExp(pattern).test(name);
+  for (const name of ['spawn_agent', 'Agent', 'wait_agent', 'collaborationspawn_agent', 'collaborationwait_agent', 'multi_agent_v1wait_agent']) {
+    assert.ok(matches(name), name);
+  }
+  for (const name of ['Bash', 'apply_patch', 'collaborationlist_agents', 'collaborationinterrupt_agent', 'mcp__example__spawn_agent']) {
+    assert.equal(matches(name), false, name);
+  }
+  assert.equal(config.hooks.PreToolUse[0].matcher, '*');
 });

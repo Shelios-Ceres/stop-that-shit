@@ -1,7 +1,9 @@
-# Install Stop That Shit 0.2.1-shelios.2
+# Install Stop That Shit
 
-The current multi-platform release is
-[`0.2.1-shelios.2`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.1-shelios.2), based on upstream [`0.2.1`](https://github.com/lennney/stop-that-shit/releases/tag/0.2.1).
+These instructions target [`0.2.4-shelios.1`](https://github.com/Shelios-Ceres/stop-that-shit/releases/tag/0.2.4-shelios.1), based on upstream `0.2.4`.
+
+For local checkout validation, use the flow under
+[Local Guard development](#local-guard-development).
 
 If an agent is doing the installation for you, give it
 [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md). That guide separates commands
@@ -18,7 +20,7 @@ claude plugin marketplace add ./
 claude plugin install stop-that-shit@stop-that-shit
 ```
 
-Restart Claude Code after installation. The plugin registers four Hook events:
+Restart Claude Code after installation. The packaged manifest registers:
 
 - `SessionStart` — injects the current contract into a new session;
 - `UserPromptSubmit` — reads host-neutral `$stop-that-shit ...` directives,
@@ -27,7 +29,11 @@ Restart Claude Code after installation. The plugin registers four Hook events:
   armed even on hosts that do not expose the `UserPromptExpansion` event;
 - `PreToolUse` — classifies covered actions and can return permission deny;
 - `SubagentStart` — injects the current contract into a started subagent. Agent
-  budget enforcement happens earlier on `PreToolUse` for the `Agent` tool.
+  budget enforcement happens earlier on `PreToolUse` for the `Agent` tool;
+- `PostToolUse` — reads available delegation results;
+- `PostToolUseFailure` — preserves capacity when completion is unproven;
+- `PermissionDenied` — releases a reservation for a call confirmed not started;
+- `SessionEnd` — preserves unresolved activity rather than assuming completion.
 
 Hosts that expose `UserPromptExpansion` may register it for earlier,
 pre-expansion arming; the adapter keeps that handler, but the packaged
@@ -42,7 +48,7 @@ If `shelios-plugins` is already registered, follow the
 [pinned upgrade steps](#upgrade-from-010-shelios3) first.
 
 ```powershell
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.2
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.4-shelios.1
 codex plugin add stop-that-shit@shelios-plugins
 ```
 
@@ -52,17 +58,18 @@ Restart Codex after installation.
 
 When changing the pinned Git tag, current Codex requires removing the old
 Marketplace registration first. This removes the source snapshot, not the
-installed plugin or its runtime data. The same steps apply to later upgrades
-from `0.2.1-shelios.1`.
+installed plugin or its runtime data. The same steps apply to upgrades
+from `0.2.1-shelios.2`.
 
 ```powershell
 codex plugin marketplace remove shelios-plugins
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.2
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.4-shelios.1
 codex plugin add stop-that-shit@shelios-plugins
 ```
 
-The plugin ID and Hook keys remain unchanged. Use a new task after installation
-and review `/hooks` only if the host requests it. The `marketplace upgrade`
+The plugin ID remains unchanged. This release adds `PostToolUse` and
+`SessionEnd`; review the new entries in `/hooks` and use a new task after
+installation. The `marketplace upgrade`
 command refreshes the configured ref; it does not select a newer release tag.
 
 ### Upgrade from `0.1.0-shelios.2`
@@ -74,12 +81,12 @@ enabled at the same time:
 ```powershell
 codex plugin remove stop-that-shit@stop-that-shit
 codex plugin marketplace remove stop-that-shit
-codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.1-shelios.2
+codex plugin marketplace add Shelios-Ceres/stop-that-shit --ref 0.2.4-shelios.1
 codex plugin add stop-that-shit@shelios-plugins
 ```
 
 The plugin ID and `$stop-that-shit` Skill command are unchanged. Restart Codex,
-review the two Hook commands again, and use a new task so the host reloads the
+review the packaged Hook commands again, and use a new task so the host reloads the
 Skill catalog under the new Marketplace identity.
 
 ## Verify the source
@@ -94,28 +101,89 @@ Inspect these executable surfaces before trusting them:
 From a local checkout, run:
 
 ```powershell
+npm ci
 npm test
 npm run eval
 npm run release:check
 ```
 
-## Review two Hooks
+## Review the packaged Hooks
 
 Codex records trust for the Hook definition hash, so inspect each Stop That Shit
 command before trusting it. Start a fresh Codex CLI TUI and enter `/hooks`.
 
-Only two events are required:
+Compare the plugin's entries with [`hooks/codex-hooks.json`](hooks/codex-hooks.json).
+Review the handlers in the installed tag's manifest. The current entries cover:
 
 - `UserPromptSubmit` reads the task mode and explicit boundaries;
-- `PreToolUse` checks a supported action before it runs.
+- `PreToolUse` checks a supported action before it runs;
+- `PostToolUse` reads supported delegation results;
+- `SessionEnd` does not prove that unresolved children have completed.
 
-After review, both rows show `Installed 1 / Active 1 / Review 0`. `Stop 0` is
-expected; the plugin does not install a Stop handler.
+After review, confirm that the handlers listed by the installed definition are
+active. Other plugins can add entries, so compare sources rather than total row
+counts. This tag does not register `Stop`, `SubagentStart`, or `SubagentStop`
+for Codex, and does not automatically continue a finished turn. Subagent events
+from older Codex configurations remain ignored; they do not prove completion or
+release capacity.
 
 Some Codex Desktop builds send `/hooks` as an ordinary message. In that case,
 complete the review in the CLI TUI and restart Desktop. An update may require
 another review because Codex records trust against the Hook definition hash. Do
-not bypass Hook trust for ordinary installation.
+not bypass Hook trust for ordinary installation. See the official
+[Codex Hook trust documentation](https://learn.chatgpt.com/docs/hooks#review-and-trust-hooks).
+
+## Directive entry
+
+Submit one `$stop-that-shit` directive on the first non-empty line, outside
+quotes and code blocks. Up to three leading spaces are accepted; four spaces
+or a tab indicate a code example. Put task text after `--`, `: `, or a newline.
+Do not put an introduction before the directive. Embedded examples do not set
+directive fields. Unknown fields and conflicting values return an error and
+preserve the previous contract; submit a corrected directive before continuing.
+
+Natural-language mode corrections also skip code examples, explicit Markdown
+quote lines, and quoted text. For example, adding a `review only` example to
+README does not switch an active edit task to review.
+
+Codex and Claude return a prompt-block response for an invalid directive.
+Pi handles the input without starting a model turn. OpenCode and Hermes add
+error context and pause tool calls until a corrected instruction clears the
+error. A valid watch/off directive also clears that pause. This input rejection
+does not change the previous contract or the shared watch/off policy.
+
+## Upgrade
+
+The former fork-only `agents=allow` parameter is removed, not an alias. For a
+new session, use `$stop-that-shit change -- ...` for the default unlimited
+capacity, or set `agents=N`. Existing finite limits (including zero) survive
+omitted parameters and upgrades. Persisted legacy allow policies migrate to
+unlimited capacity, with unverified history retained; use a fresh host session
+when a finite limit cannot be justified from legacy completion evidence.
+
+Update the plugin or standalone Skill through its host installation flow, then
+restart or reload. Checking a version is not an update. Codex users must inspect
+and trust new or changed Hook definitions before those handlers can run.
+
+`agents=N` now means reserved concurrent capacity, not cumulative calls. New
+sessions default to unlimited; migration preserves valid existing limits,
+including `0`. Schema 4 retains unresolved legacy activity. A finite Guard
+needs matching terminal evidence or a new host session; an upgrade or session
+end does not clear that activity.
+
+### Delegation capacity and uncertain completion
+
+`agents=N` reserves concurrent capacity; `0` denies new delegation. A parallel
+batch is checked as a whole, while a serial Pi `chain` reserves one slot.
+Confirmed completion releases the associated reservation; a stop request,
+session end, or unknown result does not prove completion. Under a finite limit,
+Claude `SendMessage` and OpenCode `task_id` resume calls are denied because the
+hosts do not supply a run generation that would make later completion safe to
+attribute. Calls allowed under watch/off or an unlimited budget may leave
+unresolved capacity when switching back to a finite Guard. Start a new host
+session if that activity cannot be resolved. Valid legacy budgets, including
+`0`, survive schema migration. See the [adapter contract](HOST-ADAPTER-CONTRACT.md)
+for the host-specific evidence and lifecycle rules.
 
 ## Run a smoke test
 
@@ -166,7 +234,7 @@ sessions unless you pass `--run`.
 
 ## OpenCode: install from GitHub
 
-OpenCode 1.18.18 or newer can install this repository directly from GitHub
+OpenCode V1 1.18.18 or newer can install this repository directly from GitHub
 without a checkout or npm publication:
 
 ```bash
@@ -196,14 +264,71 @@ put this entry in your OpenCode configuration:
 }
 ```
 
-OpenCode denies covered actions by throwing before tool execution. `deps=ask`
+OpenCode V1 denies covered actions by throwing before tool execution. `deps=ask`
 and `hash=ask` therefore stop the action and ask you to submit a new explicit
 `allow` contract; they do not open a second interactive permission prompt.
 
-Contract state and runtime metadata are stored below OpenCode's state directory
-in `stop-that-shit/`. OpenCode currently has no external-plugin uninstall
+Contract state and runtime metadata use `stop-that-shit/` below the OpenCode
+state directory on Unix (`XDG_STATE_HOME` or `~/.local/state`) and below
+`LOCALAPPDATA/opencode` on Windows. A plugin `dataDir` option overrides this.
+OpenCode V1 currently has no external-plugin uninstall
 subcommand; remove `github:Shelios-Ceres/stop-that-shit` from the global
 configuration's `plugin` list, then restart OpenCode.
+
+### OpenCode V2
+
+The V2 adapter in this checkout targets OpenCode **2.0.18**. It shares the same
+package and policy core with V1; V1's minimum remains **1.18.18**. V2 support
+starts with release 0.2.4.
+
+For local acceptance, install this checkout's dependencies with
+`npm ci --ignore-scripts`, then configure its **package directory**:
+
+```json
+{
+  "plugins": [
+    { "package": "/absolute/path/to/stop-that-shit" }
+  ]
+}
+```
+
+On Windows, use a path such as `C:/projects/stop-that-shit`. OpenCode 2.0.18
+ignores explicitly configured single-file paths; point at the directory that
+contains `package.json`. A packed local artifact can instead be installed with
+`npm install --ignore-scripts /path/to/stop-that-shit.tgz`; configure the installed
+`node_modules/stop-that-shit` directory. This does not require lifecycle scripts.
+
+The V2 CLI command is
+`opencode plugin add github:Shelios-Ceres/stop-that-shit`. V2 `plugin add` accepts npm
+and Git sources, not local `.tgz` files. Local packed-host acceptance does not
+establish GitHub-source installation; use the directory route for a local checkout.
+
+Restart OpenCode and use the same `$stop-that-shit review` / `change` commands.
+For noninteractive `opencode run`, pass the directive through stdin: these
+tested CLI versions quote positional messages containing spaces, which makes
+the directive quoted text instead of an instruction.
+V2 uses a typed tool error for a Guard denial, allowing the session to continue
+with permitted actions. `deps=ask` and `hash=ask` still require an explicit new
+contract. The optional `/sts` alias above is a V1 configuration example.
+
+V2 reads delivered root-session user messages, ignores synthetic and child
+instructions as authority, and injects context before model requests. Native
+`shell`, `patch`, `write`, `edit`, and `subagent` calls use the shared policy.
+Finite `agents=N` contracts reject `subagent` continuation via `sessionID`;
+start a new child instead. Unknown child outcomes retain reserved capacity.
+Code Mode's direct JavaScript/network effects are not fully covered by tool
+hooks. In review mode its unknown outer `execute` action is denied by the
+existing policy; permitting it in change mode does not establish full coverage.
+
+To remove the V2 plugin, remove its entry from `plugins` and restart. Keep the
+same `dataDir` if one was configured. V2 plugin storage holds processed message
+IDs and pending status/runtime query replies until delivery or session deletion.
+Contract state and runtime evidence retain their existing format.
+
+Maintainers can run the packed-host checks with `STS_OPENCODE_V1_BIN` and
+`STS_OPENCODE_V2_BIN` set to the respective executables:
+`node --test test/opencode-dual-smoke.test.mjs`. The checks use a local model
+stand-in and verify denial, continued reading, and explicit change after restart.
 
 ## Hermes Agent CLI
 
@@ -238,11 +363,11 @@ From a checkout that contains the Pi adapter, install it globally:
 pi install /absolute/path/to/stop-that-shit
 ```
 
-Add `-l` for a project-scoped installation. The `0.2.1-shelios.2` tagged release contains
+Add `-l` for a project-scoped installation. The tagged release contains
 the Pi adapter; use this pinned Git ref instead of an unpinned branch:
 
 ```bash
-pi install git:github.com/Shelios-Ceres/stop-that-shit@0.2.1-shelios.2
+pi install git:github.com/Shelios-Ceres/stop-that-shit@0.2.4-shelios.1
 ```
 
 Start a new Pi process, or run `/reload` in the TUI after changing package
@@ -272,10 +397,10 @@ cp skills/stop-that-shit/SKILL.md ~/.claude/skills/stop-that-shit/SKILL.md
 For Codex, ask the built-in Skill Installer to install the shared Skill folder:
 
 ```text
-$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.1-shelios.2/skills/stop-that-shit
+$skill-installer Install stop-that-shit from https://github.com/Shelios-Ceres/stop-that-shit/tree/0.2.4-shelios.1/skills/stop-that-shit
 ```
 
-To install only Stop That Shit Slop from a `0.2.1-shelios.2` checkout:
+To install only Stop That Shit Slop from the tagged checkout:
 
 ```bash
 npx skills add ./skills/stss --global
@@ -301,6 +426,39 @@ dependencies, and repository metadata inside that root can also be copied.
 For normal use, install the pinned Git tag shown above. When locating an
 installed Skill, use the path supplied by the Skills catalog or `codex plugin
 list`; do not construct a path below `plugins/cache` manually.
+
+Run local validation from the checkout root:
+
+```powershell
+npm ci
+npm test
+npm run eval
+npm run eval:paired -- --dry-run
+npm run release:check
+```
+
+The paired command prints a 144-cell plan without calling a model. Before using
+`--run`, read the [live Codex comparison guide](evals/codex-paired/README.md).
+Live runs require a dedicated Codex home with only this plugin enabled.
+
+## Check for updates
+
+With the package executable installed:
+
+```bash
+sts doctor --check-update
+```
+
+From a source checkout:
+
+```bash
+npm run sts -- doctor --check-update
+```
+
+Only this explicit command queries GitHub Releases. It returns `installed`,
+`latest`, and `releaseUrl`. It does not install updates or display reminders
+during startup or tasks. Standalone STSS updates remain under the host or Skill
+Installer update flow.
 
 ## Disable or uninstall
 
@@ -328,6 +486,8 @@ Claude Code plugins are removed with the host's plugin controls. Claude Code
 cleans up `CLAUDE_PLUGIN_DATA` when the plugin is uninstalled from its last
 scope unless you uninstall with `--keep-data`.
 
-The Guard stores only the active per-session contract in the host-provided data
-directory (`PLUGIN_DATA` for Codex, `CLAUDE_PLUGIN_DATA` for Claude Code).
-Review that directory separately if you uninstall.
+The Guard stores per-session contracts and delegation state, metadata-only
+runtime events, and manual labels in the host-provided data directory
+(`PLUGIN_DATA` for Codex, `CLAUDE_PLUGIN_DATA` for Claude Code).
+Review that directory separately if you uninstall. See [PRIVACY.md](PRIVACY.md)
+for the distinction between session state and runtime events.

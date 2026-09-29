@@ -2,6 +2,7 @@
 
 const nodePath = require('node:path');
 const {
+  analyzeCodexTool,
   classifyShell,
   detectDependencyIntent: detectCodexDependencyIntent,
   detectHashIntent: detectCodexHashIntent
@@ -28,7 +29,14 @@ function isHermesDelegationControl(toolName, toolInput) {
 function countHermesDelegation(toolName, toolInput) {
   if (toolName !== 'delegate_task' || isHermesDelegationControl(toolName, toolInput)) return 0;
   const input = toolInput && typeof toolInput === 'object' ? toolInput : {};
-  if (Array.isArray(input.tasks)) return input.tasks.length;
+  let tasks = input.tasks;
+  // Match Hermes' task-list normalization: recover only JSON arrays; an empty
+  // array falls back to goal. Invalid strings are rejected before any spawn.
+  if (typeof tasks === 'string') {
+    try { tasks = JSON.parse(tasks); } catch { return 0; }
+    if (!Array.isArray(tasks)) return 0;
+  }
+  if (Array.isArray(tasks) && tasks.length) return tasks.length;
   if (typeof input.goal === 'string' && input.goal.trim()) return 1;
   return 0;
 }
@@ -186,7 +194,19 @@ function detectHashIntent(toolName, toolInput) {
   return detectCodexHashIntent(codexToolName(toolName, toolInput), codexIntentInput(toolName, toolInput));
 }
 
+function analyzeHermesTool(toolName, toolInput, cwd) {
+  const analysis = toolName === 'terminal'
+    ? analyzeCodexTool('exec_command', codexIntentInput(toolName, toolInput), cwd)
+    : {
+      mutability: classifyHermesTool(toolName, toolInput),
+      hashIntent: detectHashIntent(toolName, toolInput),
+      dependencyIntent: detectDependencyIntent(toolName, toolInput)
+    };
+  return { ...analysis, affectedPaths: extractAffectedPaths(toolName, toolInput, cwd) };
+}
+
 module.exports = {
+  analyzeHermesTool,
   classifyHermesTool,
   countHermesDelegation,
   extractAffectedPaths,

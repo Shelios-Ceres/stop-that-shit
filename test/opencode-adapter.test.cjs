@@ -7,8 +7,11 @@ const path = require('node:path');
 const test = require('node:test');
 const {
   handleOpenCodeMessage,
+  handleOpenCodeSessionEnd,
   handleOpenCodeTool,
+  handleOpenCodeToolAfter,
   promptText,
+  toActionAfterEvent,
   toActionEvent
 } = require('../src/adapters/opencode-hooks.cjs');
 const {
@@ -38,7 +41,7 @@ function tool(sessionID, name, args) {
   return [{ tool: name, sessionID, callID: `${name}-1` }, { args }];
 }
 
-test('OpenCode Adapter maps native tool fields to ControlEvent v1', () => {
+test('OpenCode Adapter maps native tool fields to ControlEvent v2', () => {
   const event = toActionEvent(...tool('session-1', 'edit', {
     filePath: '/repo/src/config.cjs',
     oldString: 'old',
@@ -50,6 +53,38 @@ test('OpenCode Adapter maps native tool fields to ControlEvent v1', () => {
   assert.equal(event.action.mutability, 'write');
   assert.deepEqual(event.action.affectedPaths, ['src/config.cjs']);
   assert.equal(event.action.cwd, '/repo');
+});
+
+test('OpenCode Adapter maps tool completion and session end to ControlEvent v2', (t) => {
+  const options = workspace(t);
+  const after = toActionAfterEvent(
+    { tool: 'task', sessionID: 'child', callID: 'task-1', async_launched: false },
+    { controlSessionID: 'root' }
+  );
+
+  assert.equal(after.kind, 'action.after');
+  assert.equal(after.sessionId, 'root');
+  assert.equal(after.action.id, 'task-1');
+  assert.equal(after.action.lifecycle, 'unknown');
+
+  const unknown = toActionAfterEvent(
+    { tool: 'task', sessionID: 'child', callID: 'task-2' },
+    { controlSessionID: 'root' }
+  );
+  assert.equal(unknown.action.asyncLaunched, undefined);
+
+  const end = handleOpenCodeSessionEnd(
+    { sessionID: 'root' },
+    {},
+    options
+  );
+  assert.equal(end.kind, 'context');
+  assert.equal(handleOpenCodeToolAfter(
+    { tool: 'task', sessionID: 'root', callID: 'task-1' },
+    {},
+    {},
+    options
+  ).kind, 'none');
 });
 
 test('OpenCode prompt extraction ignores synthetic host messages', () => {
@@ -142,10 +177,12 @@ test('task continuations do not consume a new agent budget', () => {
   assert.equal(classifyOpenCodeTool('bash', { command: 'node scripts/change.js' }), 'unknown');
 });
 
-test('agents=allow permits observable OpenCode task delegation without consuming legacy counters', (t) => {
+test('default agent limit permits observable OpenCode task delegation with reservations', (t) => {
   const options = workspace(t);
-  handleOpenCodeMessage(...message('allow-session', '$stop-that-shit change agents=allow -- explicit delegation'), {}, options);
+  handleOpenCodeMessage(...message('allow-session', '$stop-that-shit change -- explicit delegation'), {}, options);
   assert.equal(handleOpenCodeTool(...tool('allow-session', 'task', { prompt: 'inspect' }), { directory: '/repo' }, options).kind, 'none');
-  assert.equal(readState('allow-session', options.dataDir).contract.agentPolicy, 'allow');
-  assert.equal(readState('allow-session', options.dataDir).contract.agentsUsed, 0);
+  const state = readState('allow-session', options.dataDir);
+  assert.equal(state.contract.agentBudget, Number.MAX_SAFE_INTEGER);
+  assert.equal('agentsUsed' in state.contract, false);
+  assert.equal(Object.keys(state.delegation.reservations).length, 1);
 });

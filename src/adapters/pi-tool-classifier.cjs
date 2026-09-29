@@ -1,6 +1,7 @@
 'use strict';
 
 const {
+  analyzeShell,
   detectDependencyIntent: detectCodexDependencyIntent,
   detectHashIntent: detectCodexHashIntent,
   classifyShell
@@ -24,7 +25,7 @@ function piDelegationShape(toolName, toolInput) {
   const modes = Number(hasTasks) + Number(hasChain) + Number(Boolean(hasSingle));
   if (modes !== 1) return { count: 0, unbounded: true };
   if (hasTasks) return { count: input.tasks.length, unbounded: false };
-  if (hasChain) return { count: input.chain.length, unbounded: false };
+  if (hasChain) return { count: 1, unbounded: false };
   return { count: 1, unbounded: false };
 }
 
@@ -100,7 +101,20 @@ function detectHashIntent(toolName, toolInput) {
   return false;
 }
 
+function analyzePiTool(toolName, toolInput, cwd) {
+  const name = String(toolName || '').toLowerCase();
+  const analysis = name === 'bash' || name === 'powershell'
+    ? analyzeShell(toolInput && toolInput.command)
+    : {
+      mutability: classifyPiTool(toolName, toolInput),
+      hashIntent: detectHashIntent(toolName, toolInput),
+      dependencyIntent: detectDependencyIntent(toolName, toolInput)
+    };
+  return { ...analysis, affectedPaths: extractAffectedPaths(toolName, toolInput, cwd) };
+}
+
 module.exports = {
+  analyzePiTool,
   classifyPiTool,
   detectDependencyIntent,
   detectHashIntent,
